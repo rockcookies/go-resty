@@ -13,6 +13,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -1830,6 +1831,18 @@ func TestTraceInfo(t *testing.T) {
 
 	})
 
+	t.Run("enable trace on invalid request, issue #1016", func(t *testing.T) {
+		resp, err := client.R().EnableTrace().Get("unknown://url.com")
+		assertNotNil(t, err)
+		tr := resp.Request.TraceInfo()
+		assertEqual(t, true, tr.DNSLookup == 0)
+		assertEqual(t, true, tr.ConnTime == 0)
+		assertEqual(t, true, tr.TLSHandshake == 0)
+		assertEqual(t, true, tr.ServerTime == 0)
+		assertEqual(t, true, tr.ResponseTime == 0)
+		assertEqual(t, true, tr.TotalTime > 0 && tr.TotalTime < time.Second)
+	})
+
 	t.Run("enable trace and debug on request", func(t *testing.T) {
 		c, logBuf := dcldb()
 		c.SetBaseURL(ts.URL)
@@ -1915,6 +1928,83 @@ func TestTraceInfoOnTimeout(t *testing.T) {
 	assertEqual(t, true, tr.TotalTime == resp.Duration())
 }
 
+func TestTraceInfoOnTimeoutWithSetTimeout(t *testing.T) {
+	t.Run("timeout with very short timeout", func(t *testing.T) {
+		client := New().
+			SetTimeout(1 * time.Millisecond).
+			SetBaseURL("http://resty-nowhere.local").
+			EnableTrace()
+
+		resp, err := client.R().Get("/")
+		assertNotNil(t, err)
+		assertNotNil(t, resp)
+
+		tr := resp.Request.TraceInfo()
+
+		assertEqual(t, true, tr.DNSLookup == 0)
+		assertEqual(t, true, tr.ConnTime == 0)
+		assertEqual(t, true, tr.TLSHandshake == 0)
+		assertEqual(t, true, tr.TCPConnTime == 0)
+		assertEqual(t, true, tr.ServerTime == 0)
+		assertEqual(t, true, tr.ResponseTime == 0)
+		assertEqual(t, true, tr.TotalTime > 0)
+		assertEqual(t, true, tr.TotalTime == resp.Duration())
+	})
+
+	t.Run("successful request with SetTimeout", func(t *testing.T) {
+		ts := createGetServer(t)
+		defer ts.Close()
+
+		client := New().
+			SetTimeout(5 * time.Second).
+			SetBaseURL(ts.URL).
+			EnableTrace()
+
+		resp, err := client.R().Get("/")
+		assertNil(t, err)
+		assertNotNil(t, resp)
+
+		tr := resp.Request.TraceInfo()
+
+		assertEqual(t, true, tr.DNSLookup >= 0)
+		assertEqual(t, true, tr.ConnTime >= 0)
+		assertEqual(t, true, tr.TLSHandshake >= 0)
+		assertEqual(t, true, tr.TCPConnTime >= 0)
+		assertEqual(t, true, tr.ServerTime >= 0)
+		assertEqual(t, true, tr.ResponseTime >= 0)
+		assertEqual(t, true, tr.TotalTime > 0)
+		assertEqual(t, true, tr.TotalTime == resp.Duration())
+	})
+
+	t.Run("HTTPS request with TLS handshake", func(t *testing.T) {
+		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("OK"))
+		}))
+		defer ts.Close()
+
+		client := New().
+			SetTimeout(5 * time.Second).
+			SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
+			EnableTrace()
+
+		resp, err := client.R().Get(ts.URL)
+		assertNil(t, err)
+		assertNotNil(t, resp)
+
+		tr := resp.Request.TraceInfo()
+
+		assertEqual(t, true, tr.TLSHandshake > 0)
+		assertEqual(t, true, tr.DNSLookup >= 0)
+		assertEqual(t, true, tr.ConnTime >= 0)
+		assertEqual(t, true, tr.TCPConnTime >= 0)
+		assertEqual(t, true, tr.ServerTime >= 0)
+		assertEqual(t, true, tr.ResponseTime >= 0)
+		assertEqual(t, true, tr.TotalTime > 0)
+		assertEqual(t, true, tr.TotalTime == resp.Duration())
+	})
+}
+
 func TestDebugLoggerRequestBodyTooLarge(t *testing.T) {
 	formTs := createFormPostServer(t)
 	defer formTs.Close()
@@ -1993,7 +2083,7 @@ func TestPostMapTemporaryRedirect(t *testing.T) {
 	assertEqual(t, http.StatusOK, resp.StatusCode())
 }
 
-func TestPostWith204Responset(t *testing.T) {
+func TestPostWith204Response(t *testing.T) {
 	ts := createPostServer(t)
 	defer ts.Close()
 

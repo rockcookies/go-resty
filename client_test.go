@@ -87,7 +87,6 @@ func TestClientAuthScheme(t *testing.T) {
 	resp2, err2 := c.R().Get("/profile")
 	assertError(t, err2)
 	assertEqual(t, http.StatusOK, resp2.StatusCode())
-
 }
 
 func TestClientResponseMiddleware(t *testing.T) {
@@ -320,6 +319,7 @@ func (rt *CustomRoundTripper2) RoundTrip(_ *http.Request) (*http.Response, error
 func (rt *CustomRoundTripper2) TLSClientConfig() *tls.Config {
 	return rt.tlsConfig
 }
+
 func (rt *CustomRoundTripper2) SetTLSClientConfig(tlsConfig *tls.Config) error {
 	if rt.returnErr {
 		return errors.New("test mock error")
@@ -329,7 +329,6 @@ func (rt *CustomRoundTripper2) SetTLSClientConfig(tlsConfig *tls.Config) error {
 }
 
 func TestClientTLSConfigerInterface(t *testing.T) {
-
 	t.Run("assert transport and custom roundtripper", func(t *testing.T) {
 		c := dcnl()
 
@@ -971,6 +970,7 @@ func TestCustomTransportSettings(t *testing.T) {
 		ExpectContinueTimeout:  1 * time.Second,
 		MaxIdleConns:           50,
 		MaxIdleConnsPerHost:    3,
+		MaxConnsPerHost:        100,
 		ResponseHeaderTimeout:  10 * time.Second,
 		MaxResponseHeaderBytes: 1 << 10,
 		WriteBufferSize:        2 << 10,
@@ -1122,7 +1122,7 @@ func TestClientOnResponseError(t *testing.T) {
 			ts := createAuthServer(t)
 			defer ts.Close()
 
-			var assertErrorHook = func(r *Request, err error) {
+			assertErrorHook := func(r *Request, err error) {
 				assertNotNil(t, r)
 				v, ok := err.(*ResponseError)
 				assertEqual(t, test.hasResponse, ok)
@@ -1348,6 +1348,15 @@ func TestClientClone(t *testing.T) {
 
 	// assert interface/pointer type
 	assertEqual(t, parent.Client(), clone.Client())
+
+	// assert cookies
+	parentCookies := parent.Cookies()
+	cloneCookies := clone.Cookies()
+	assertEqual(t, len(parentCookies), len(cloneCookies))
+	for i := range parentCookies {
+		assertEqual(t, parentCookies[i].Name, cloneCookies[i].Name)
+		assertEqual(t, parentCookies[i].Value, cloneCookies[i].Value)
+	}
 }
 
 func TestResponseBodyLimit(t *testing.T) {
@@ -1514,4 +1523,36 @@ func TestClientCircuitBreaker(t *testing.T) {
 	_, err = c.R().Get(ts.URL + "/500")
 	assertError(t, err)
 	assertEqual(t, uint32(1), c.circuitBreaker.failureCount.Load())
+}
+
+func TestClientOnClose(t *testing.T) {
+	var hookExecuted bool
+
+	c := dcnl()
+	c.OnClose(func() {
+		hookExecuted = true
+	})
+
+	err := c.Close()
+	assertNil(t, err)
+	assertEqual(t, true, hookExecuted)
+}
+
+func TestClientOnCloseMultipleHooks(t *testing.T) {
+	var executionOrder []string
+
+	c := dcnl()
+	c.OnClose(func() {
+		executionOrder = append(executionOrder, "first")
+	})
+	c.OnClose(func() {
+		executionOrder = append(executionOrder, "second")
+	})
+	c.OnClose(func() {
+		executionOrder = append(executionOrder, "third")
+	})
+
+	err := c.Close()
+	assertNil(t, err)
+	assertEqual(t, []string{"first", "second", "third"}, executionOrder)
 }

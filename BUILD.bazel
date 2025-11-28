@@ -37,7 +37,6 @@ go_test(
     name = "resty_test",
     srcs = [
         "benchmark_test.go",
-        "cert_watcher_test.go",
         "client_test.go",
         "context_test.go",
         "curl_test.go",

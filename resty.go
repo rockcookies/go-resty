@@ -181,7 +181,6 @@ func createClient(hc *http.Client) *Client {
 		contentTypeDecoders:      make(map[string]ContentTypeDecoder),
 		contentDecompresserKeys:  make([]string, 0),
 		contentDecompressers:     make(map[string]ContentDecompresser),
-		certWatcherStopChan:      make(chan bool),
 	}
 
 	// Logger

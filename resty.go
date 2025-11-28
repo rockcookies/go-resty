@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
-	"net/url"
 	"runtime"
 	"sync"
 	"time"
@@ -164,16 +163,11 @@ func createCookieJar() *cookiejar.Jar {
 func createClient(hc *http.Client) *Client {
 	c := &Client{ // not setting language default values
 		lock:                     &sync.RWMutex{},
-		queryParams:              url.Values{},
-		formData:                 url.Values{},
-		header:                   http.Header{},
-		authScheme:               defaultAuthScheme,
 		cookies:                  make([]*http.Cookie, 0),
 		retryWaitTime:            defaultWaitTime,
 		retryMaxWaitTime:         defaultMaxWaitTime,
 		isRetryDefaultConditions: true,
 		pathParams:               make(map[string]string),
-		headerAuthorizationKey:   hdrAuthorizationKey,
 		jsonEscapeHTML:           true,
 		httpClient:               hc,
 		debugBodyLimit:           math.MaxInt32,

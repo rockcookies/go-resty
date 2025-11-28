@@ -243,13 +243,11 @@ func Test_parseRequestURL(t *testing.T) {
 		},
 		{
 			name: "adding query parameters by client",
-			initClient: func(c *Client) {
-				c.SetQueryParams(map[string]string{
+			initRequest: func(r *Request) {
+				r.SetQueryParams(map[string]string{
 					"foo": "1",
 					"bar": "2",
 				})
-			},
-			initRequest: func(r *Request) {
 				r.URL = "https://example.com/"
 			},
 			expectedURL: "https://example.com/?foo=1&bar=2",
@@ -267,15 +265,10 @@ func Test_parseRequestURL(t *testing.T) {
 		},
 		{
 			name: "adding query parameters by client and request",
-			initClient: func(c *Client) {
-				c.SetQueryParams(map[string]string{
-					"foo": "1", // ignored, because of the "foo" parameter in request
-					"bar": "2",
-				})
-			},
 			initRequest: func(r *Request) {
 				r.SetQueryParams(map[string]string{
 					"foo": "3",
+					"bar": "2",
 				})
 				r.URL = "https://example.com/"
 			},
@@ -303,20 +296,17 @@ func Test_parseRequestURL(t *testing.T) {
 		{
 			name: "unescape query params",
 			initClient: func(c *Client) {
-				c.SetBaseURL("https://example.com/").
-					SetUnescapeQueryParams(true). // this line is just code coverage; I will restructure this test in v3 for the client and request the respective init method
-					SetQueryParam("fromclient", "hey unescape").
-					SetQueryParam("initone", "cáfe")
+				c.SetBaseURL("https://example.com/")
 			},
 			initRequest: func(r *Request) {
-				r.SetUnescapeQueryParams(true) // this line takes effect
+				r.SetUnescapeQueryParams(true)
 				r.SetQueryParams(
 					map[string]string{
 						"registry": "nacos://test:6801", // GH #797
 					},
 				)
 			},
-			expectedURL: "https://example.com?initone=cáfe&fromclient=hey+unescape&registry=nacos://test:6801",
+			expectedURL: "https://example.com?registry=nacos://test:6801",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -372,9 +362,9 @@ func Test_parseRequestHeader(t *testing.T) {
 			},
 		},
 		{
-			name: "headers in client",
+			name: "headers in request",
 			init: func(c *Client, r *Request) {
-				c.SetHeaders(map[string]string{
+				r.SetHeaders(map[string]string{
 					"foo": "1",
 					"bar": "2",
 				})
@@ -386,25 +376,6 @@ func Test_parseRequestHeader(t *testing.T) {
 			},
 		},
 		{
-			name: "headers in client and request",
-			init: func(c *Client, r *Request) {
-				c.SetHeaders(map[string]string{
-					"foo": "1", // ignored, because of the same header in the request
-					"bar": "2",
-				})
-				r.SetHeaders(map[string]string{
-					"foo": "3",
-					"xyz": "4",
-				})
-			},
-			expectedHeader: http.Header{
-				http.CanonicalHeaderKey("foo"): []string{"3"},
-				http.CanonicalHeaderKey("bar"): []string{"2"},
-				http.CanonicalHeaderKey("xyz"): []string{"4"},
-				hdrUserAgentKey:                []string{hdrUserAgentValue},
-			},
-		},
-		{
 			name: "no headers",
 			init: func(c *Client, r *Request) {},
 			expectedHeader: http.Header{
@@ -412,9 +383,9 @@ func Test_parseRequestHeader(t *testing.T) {
 			},
 		},
 		{
-			name: "user agent",
+			name: "user agent override",
 			init: func(c *Client, r *Request) {
-				c.SetHeader(hdrUserAgentKey, "foo bar")
+				r.SetHeader(hdrUserAgentKey, "foo bar")
 			},
 			expectedHeader: http.Header{
 				http.CanonicalHeaderKey(hdrUserAgentKey): []string{"foo bar"},
@@ -423,7 +394,7 @@ func Test_parseRequestHeader(t *testing.T) {
 		{
 			name: "json content type",
 			init: func(c *Client, r *Request) {
-				c.SetHeader(hdrContentTypeKey, "application/json")
+				r.SetHeader(hdrContentTypeKey, "application/json")
 			},
 			expectedHeader: http.Header{
 				hdrContentTypeKey: []string{"application/json"},
@@ -491,18 +462,6 @@ func TestParseRequestBody(t *testing.T) {
 				r.SetBody("foo")
 				r.Method = http.MethodGet
 			},
-		},
-		{
-			name: "string body with GET method and AllowMethodGetPayload by client",
-			initClient: func(c *Client) {
-				c.SetAllowMethodGetPayload(true)
-			},
-			initRequest: func(r *Request) {
-				r.SetBody("foo")
-				r.Method = http.MethodGet
-			},
-			expectedBodyBuf:     []byte("foo"),
-			expectedContentType: plainTextType,
 		},
 		{
 			name: "string body with GET method and AllowMethodGetPayload by request",
@@ -622,35 +581,15 @@ func TestParseRequestBody(t *testing.T) {
 			expectedContentType: formContentType,
 		},
 		{
-			name: "form data by client with method patch",
-			initClient: func(c *Client) {
-				c.SetFormData(map[string]string{
-					"foo": "1",
-					"bar": "2",
-				})
-			},
-			initRequest: func(r *Request) {
-				r.SetMethod(MethodPatch)
-			},
-			expectedBodyBuf:     []byte("foo=1&bar=2"),
-			expectedContentType: formContentType,
-		},
-		{
-			name: "form data by client and request",
-			initClient: func(c *Client) {
-				c.SetFormData(map[string]string{
-					"foo": "1",
-					"bar": "2",
-				})
-			},
+			name: "form data by request only",
 			initRequest: func(r *Request) {
 				r.SetMethod(MethodPatch).
 					SetFormData(map[string]string{
-						"foo": "3",
-						"baz": "4",
+						"foo": "1",
+						"bar": "2",
 					})
 			},
-			expectedBodyBuf:     []byte("foo=3&bar=2&baz=4"),
+			expectedBodyBuf:     []byte("foo=1&bar=2"),
 			expectedContentType: formContentType,
 		},
 		{
@@ -912,15 +851,15 @@ func TestRequestURL_GH797(t *testing.T) {
 	ts := createGetServer(t)
 	defer ts.Close()
 	c := dcnl().
-		SetBaseURL(ts.URL).
-		SetUnescapeQueryParams(true). // this line is just code coverage; I will restructure this test in v3 for the client and request the respective init method
-		SetQueryParam("fromclient", "hey unescape").
-		SetQueryParam("initone", "cáfe")
+		SetBaseURL(ts.URL)
+
 	resp, err := c.R().
-		SetUnescapeQueryParams(true). // this line takes effect
+		SetUnescapeQueryParams(true).
 		SetQueryParams(
 			map[string]string{
-				"registry": "nacos://test:6801", // GH #797
+				"initone":    "cáfe",
+				"fromclient": "hey unescape",
+				"registry":   "nacos://test:6801", // GH #797
 			},
 		).
 		Get("/unescape-query-params")

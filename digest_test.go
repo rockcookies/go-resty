@@ -39,7 +39,7 @@ func TestClientDigestAuth(t *testing.T) {
 
 	c := dcnl().
 		SetBaseURL(ts.URL+"/").
-		SetDigestAuth(conf.username, conf.password)
+		UseDigestAuth(conf.username, conf.password)
 
 	resp, err := c.R().
 		SetResult(&AuthSuccess{}).
@@ -57,7 +57,7 @@ func TestClientDigestAuthSession(t *testing.T) {
 
 	c := dcnl().
 		SetBaseURL(ts.URL+"/").
-		SetDigestAuth(conf.username, conf.password)
+		UseDigestAuth(conf.username, conf.password)
 
 	resp, err := c.R().
 		SetResult(&AuthSuccess{}).
@@ -90,7 +90,7 @@ func TestClientDigestAuthErrors(t *testing.T) {
 
 		c := dcnl().
 			SetBaseURL(ts.URL+"/").
-			SetDigestAuth(conf.username, conf.password)
+			UseDigestAuth(conf.username, conf.password)
 
 		_, err := c.R().Get(conf.uri)
 		assertErrorIs(t, tc.expect, err)
@@ -103,7 +103,7 @@ func TestClientDigestAuthWithBody(t *testing.T) {
 	ts := createDigestServer(t, &conf)
 	defer ts.Close()
 
-	c := dcnl().SetDigestAuth(conf.username, conf.password)
+	c := dcnl().UseDigestAuth(conf.username, conf.password)
 
 	resp, err := c.R().
 		SetResult(&AuthSuccess{}).
@@ -121,7 +121,7 @@ func TestClientDigestAuthWithBodyQopAuthInt(t *testing.T) {
 	ts := createDigestServer(t, &conf)
 	defer ts.Close()
 
-	c := dcnl().SetDigestAuth(conf.username, conf.password)
+	c := dcnl().UseDigestAuth(conf.username, conf.password)
 
 	resp, err := c.R().
 		SetResult(&AuthSuccess{}).
@@ -139,7 +139,7 @@ func TestClientDigestAuthWithBodyQopAuthIntIoCopyError(t *testing.T) {
 	ts := createDigestServer(t, &conf)
 	defer ts.Close()
 
-	c := dcnl().SetDigestAuth(conf.username, conf.password)
+	c := dcnl().UseDigestAuth(conf.username, conf.password)
 
 	errCopyMsg := "test copy error"
 	ioCopy = func(dst io.Writer, src io.Reader) (written int64, err error) {
@@ -166,7 +166,7 @@ func TestClientDigestAuthRoundTripError(t *testing.T) {
 	defer ts.Close()
 
 	c := dcnl().SetTransport(&CustomRoundTripper2{returnErr: true})
-	c.SetDigestAuth(conf.username, conf.password)
+	c.UseDigestAuth(conf.username, conf.password)
 
 	_, err := c.R().
 		SetResult(&AuthSuccess{}).
@@ -184,7 +184,7 @@ func TestClientDigestAuthWithBodyQopAuthIntGetBodyNil(t *testing.T) {
 	ts := createDigestServer(t, &conf)
 	defer ts.Close()
 
-	c := dcnl().SetDigestAuth(conf.username, conf.password)
+	c := dcnl().UseDigestAuth(conf.username, conf.password)
 	c.SetRequestMiddlewares(
 		PrepareRequestMiddleware,
 		func(c *Client, r *Request) error {
@@ -209,7 +209,7 @@ func TestClientDigestAuthWithGetBodyError(t *testing.T) {
 	ts := createDigestServer(t, &conf)
 	defer ts.Close()
 
-	c := dcnl().SetDigestAuth(conf.username, conf.password)
+	c := dcnl().UseDigestAuth(conf.username, conf.password)
 	c.SetRequestMiddlewares(
 		PrepareRequestMiddleware,
 		func(c *Client, r *Request) error {
@@ -237,7 +237,7 @@ func TestClientDigestAuthWithGetBodyNilReadError(t *testing.T) {
 	ts := createDigestServer(t, &conf)
 	defer ts.Close()
 
-	c := dcnl().SetDigestAuth(conf.username, conf.password)
+	c := dcnl().UseDigestAuth(conf.username, conf.password)
 	c.SetRequestMiddlewares(
 		PrepareRequestMiddleware,
 		func(c *Client, r *Request) error {
@@ -263,7 +263,7 @@ func TestClientDigestAuthWithNoBodyQopAuthInt(t *testing.T) {
 	ts := createDigestServer(t, &conf)
 	defer ts.Close()
 
-	c := dcnl().SetDigestAuth(conf.username, conf.password)
+	c := dcnl().UseDigestAuth(conf.username, conf.password)
 
 	resp, err := c.R().Get(ts.URL + conf.uri)
 
@@ -278,7 +278,7 @@ func TestClientDigestAuthNoQop(t *testing.T) {
 	ts := createDigestServer(t, &conf)
 	defer ts.Close()
 
-	c := dcnl().SetDigestAuth(conf.username, conf.password)
+	c := dcnl().UseDigestAuth(conf.username, conf.password)
 
 	resp, err := c.R().
 		SetResult(&AuthSuccess{}).
@@ -297,7 +297,7 @@ func TestClientDigestAuthWithIncorrectNcValue(t *testing.T) {
 	ts := createDigestServer(t, &conf)
 	defer ts.Close()
 
-	c := dcnl().SetDigestAuth(conf.username, conf.password)
+	c := dcnl().UseDigestAuth(conf.username, conf.password)
 
 	resp, err := c.R().
 		SetResult(&AuthSuccess{}).

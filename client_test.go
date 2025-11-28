@@ -35,11 +35,11 @@ func TestClientBasicAuth(t *testing.T) {
 	defer ts.Close()
 
 	c := dcnl()
-	c.SetBasicAuth("myuser", "basicauth").
-		SetBaseURL(ts.URL).
+	c.SetBaseURL(ts.URL).
 		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
 
 	resp, err := c.R().
+		SetBasicAuth("myuser", "basicauth").
 		SetResult(&AuthSuccess{}).
 		Post("/login")
 
@@ -56,10 +56,11 @@ func TestClientAuthToken(t *testing.T) {
 
 	c := dcnl()
 	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").
 		SetBaseURL(ts.URL + "/")
 
-	resp, err := c.R().Get("/profile")
+	resp, err := c.R().
+		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").
+		Get("/profile")
 
 	assertError(t, err)
 	assertEqual(t, http.StatusOK, resp.StatusCode())
@@ -72,19 +73,20 @@ func TestClientAuthScheme(t *testing.T) {
 	c := dcnl()
 	// Ensure default Bearer
 	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").
 		SetBaseURL(ts.URL + "/")
 
-	resp, err := c.R().Get("/profile")
+	resp, err := c.R().
+		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").
+		Get("/profile")
 
 	assertError(t, err)
 	assertEqual(t, http.StatusOK, resp.StatusCode())
 
 	// Ensure setting the scheme works as well
-	c.SetAuthScheme("Bearer")
-	assertEqual(t, "Bearer", c.AuthScheme())
+	r := c.R().SetAuthScheme("Bearer")
+	assertEqual(t, "Bearer", r.AuthScheme)
 
-	resp2, err2 := c.R().Get("/profile")
+	resp2, err2 := r.SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").Get("/profile")
 	assertError(t, err2)
 	assertEqual(t, http.StatusOK, resp2.StatusCode())
 }
@@ -429,14 +431,16 @@ func TestClientSetHeaderVerbatim(t *testing.T) {
 	ts := createPostServer(t)
 	defer ts.Close()
 
-	c := dcnl().
+	c := dcnl()
+
+	r := c.R().
 		SetHeaderVerbatim("header-lowercase", "value_lowercase").
 		SetHeader("header-lowercase", "value_standard")
 
 	//lint:ignore SA1008 valid one, so ignore this!
-	unConventionHdrValue := strings.Join(c.Header()["header-lowercase"], "")
+	unConventionHdrValue := strings.Join(r.Header["header-lowercase"], "")
 	assertEqual(t, "value_lowercase", unConventionHdrValue)
-	assertEqual(t, "value_standard", c.Header().Get("Header-Lowercase"))
+	assertEqual(t, "value_standard", r.Header.Get("Header-Lowercase"))
 }
 
 func TestClientSetTransport(t *testing.T) {
@@ -495,12 +499,12 @@ func TestClientSettingsCoverage(t *testing.T) {
 	assertEqual(t, 0, len(c.RetryConditions()))
 
 	authToken := "sample auth token value"
-	c.SetAuthToken(authToken)
-	assertEqual(t, authToken, c.AuthToken())
+	r := c.R().SetAuthToken(authToken)
+	assertEqual(t, authToken, r.AuthToken)
 
 	customAuthHeader := "X-Custom-Authorization"
-	c.SetHeaderAuthorizationKey(customAuthHeader)
-	assertEqual(t, customAuthHeader, c.HeaderAuthorizationKey())
+	r = c.R().SetHeaderAuthorizationKey(customAuthHeader)
+	assertEqual(t, customAuthHeader, r.HeaderAuthorizationKey)
 
 	c.SetCloseConnection(true)
 
@@ -629,11 +633,9 @@ func TestClientAllowMethodGetPayload(t *testing.T) {
 
 	t.Run("method GET allow string payload at client level", func(t *testing.T) {
 		c := dcnl()
-		c.SetAllowMethodGetPayload(true)
-		assertEqual(t, true, c.AllowMethodGetPayload())
 
 		payload := "test-payload"
-		resp, err := c.R().SetBody(payload).Get(ts.URL + "/get-method-payload-test")
+		resp, err := c.R().SetAllowMethodGetPayload(true).SetBody(payload).Get(ts.URL + "/get-method-payload-test")
 
 		assertError(t, err)
 		assertEqual(t, http.StatusOK, resp.StatusCode())
@@ -642,12 +644,10 @@ func TestClientAllowMethodGetPayload(t *testing.T) {
 
 	t.Run("method GET allow io.Reader payload at client level", func(t *testing.T) {
 		c := dcnl()
-		c.SetAllowMethodGetPayload(true)
-		assertEqual(t, true, c.AllowMethodGetPayload())
 
 		payload := "test-payload"
 		body := bytes.NewReader([]byte(payload))
-		resp, err := c.R().SetBody(body).Get(ts.URL + "/get-method-payload-test")
+		resp, err := c.R().SetAllowMethodGetPayload(true).SetBody(body).Get(ts.URL + "/get-method-payload-test")
 
 		assertError(t, err)
 		assertEqual(t, http.StatusOK, resp.StatusCode())
@@ -656,11 +656,9 @@ func TestClientAllowMethodGetPayload(t *testing.T) {
 
 	t.Run("method GET disallow payload at client level", func(t *testing.T) {
 		c := dcnl()
-		c.SetAllowMethodGetPayload(false)
-		assertEqual(t, false, c.AllowMethodGetPayload())
 
 		payload := bytes.NewReader([]byte("test-payload"))
-		resp, err := c.R().SetBody(payload).Get(ts.URL + "/get-method-payload-test")
+		resp, err := c.R().SetAllowMethodGetPayload(false).SetBody(payload).Get(ts.URL + "/get-method-payload-test")
 
 		assertError(t, err)
 		assertEqual(t, http.StatusOK, resp.StatusCode())
@@ -675,11 +673,8 @@ func TestClientAllowMethodDeletePayload(t *testing.T) {
 	t.Run("method DELETE allow string payload at client level", func(t *testing.T) {
 		c := dcnl().SetBaseURL(ts.URL)
 
-		c.SetAllowMethodDeletePayload(true)
-		assertEqual(t, true, c.AllowMethodDeletePayload())
-
 		payload := "test-payload"
-		resp, err := c.R().SetBody(payload).Delete("/delete")
+		resp, err := c.R().SetAllowMethodDeletePayload(true).SetBody(payload).Delete("/delete")
 
 		assertError(t, err)
 		assertEqual(t, http.StatusOK, resp.StatusCode())
@@ -689,12 +684,9 @@ func TestClientAllowMethodDeletePayload(t *testing.T) {
 	t.Run("method DELETE allow io.Reader payload at client level", func(t *testing.T) {
 		c := dcnl().SetBaseURL(ts.URL)
 
-		c.SetAllowMethodDeletePayload(true)
-		assertEqual(t, true, c.AllowMethodDeletePayload())
-
 		payload := "test-payload"
 		body := bytes.NewReader([]byte(payload))
-		resp, err := c.R().SetBody(body).Delete("/delete")
+		resp, err := c.R().SetAllowMethodDeletePayload(true).SetBody(body).Delete("/delete")
 
 		assertError(t, err)
 		assertEqual(t, http.StatusOK, resp.StatusCode())
@@ -704,11 +696,8 @@ func TestClientAllowMethodDeletePayload(t *testing.T) {
 	t.Run("method DELETE disallow payload at client level", func(t *testing.T) {
 		c := dcnl().SetBaseURL(ts.URL)
 
-		c.SetAllowMethodDeletePayload(false)
-		assertEqual(t, false, c.AllowMethodDeletePayload())
-
 		payload := bytes.NewReader([]byte("test-payload"))
-		resp, err := c.R().SetBody(payload).Delete("/delete")
+		resp, err := c.R().SetAllowMethodDeletePayload(false).SetBody(payload).Delete("/delete")
 
 		assertError(t, err)
 		assertEqual(t, http.StatusOK, resp.StatusCode())
@@ -872,7 +861,7 @@ func TestClientLogCallbacks(t *testing.T) {
 
 	c, lb := dcldb()
 
-	c.OnDebugLog(func(dl *DebugLog, _ *Response) {
+	firstCallback := func(dl *DebugLog, _ *Response) {
 		// request
 		// masking authorization header
 		dl.Request.Header.Set("Authorization", "Bearer *******************************")
@@ -880,10 +869,11 @@ func TestClientLogCallbacks(t *testing.T) {
 		// response
 		dl.Response.Header.Add("X-Debug-Response-Log", "Modified :)")
 		dl.Response.Body += "\nModified the response body content"
-	})
+	}
 
-	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF")
+	c.OnDebugLog(firstCallback)
+
+	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
 
 	resp, err := c.R().
 		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF-Request").
@@ -899,16 +889,18 @@ func TestClientLogCallbacks(t *testing.T) {
 	assertEqual(t, true, strings.Contains(logInfo, "Modified the response body content"))
 
 	// overwrite scenario
-	c.OnDebugLog(func(dl *DebugLog, _ *Response) {
+	secondCallback := func(dl *DebugLog, _ *Response) {
 		// overwrite debug log
-	})
+	}
+
+	c.OnDebugLog(secondCallback)
 	resp, err = c.R().
 		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF-Request").
 		Get(ts.URL + "/profile")
 	assertNil(t, err)
 	assertNotNil(t, resp)
 	assertEqual(t, int64(66), resp.Size())
-	assertEqual(t, true, strings.Contains(lb.String(), "Overwriting an existing on-debug-log callback from=resty.dev/v3.TestClientLogCallbacks.func1 to=resty.dev/v3.TestClientLogCallbacks.func2"))
+	assertEqual(t, true, strings.Contains(lb.String(), fmt.Sprintf("Overwriting an existing on-debug-log callback from=%s to=%s", functionName(firstCallback), functionName(secondCallback))))
 }
 
 func TestDebugLogSimultaneously(t *testing.T) {
@@ -1024,9 +1016,6 @@ func TestClientOnResponseError(t *testing.T) {
 		},
 		{
 			name: "http_status_error",
-			setup: func(client *Client) {
-				client.SetAuthToken("BAD")
-			},
 		},
 		{
 			name: "before_request_error",
@@ -1118,7 +1107,6 @@ func TestClientOnResponseError(t *testing.T) {
 			}()
 			c := dcnl().
 				SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-				SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").
 				SetRetryCount(0).
 				SetRetryMaxWaitTime(time.Microsecond).
 				AddRetryConditions(func(response *Response, err error) bool {
@@ -1291,7 +1279,6 @@ func TestClientClone(t *testing.T) {
 
 	// set a non-interface field
 	parent.SetBaseURL("http://localhost")
-	parent.SetBasicAuth("parent", "")
 	parent.SetProxy("http://localhost:8080")
 
 	parent.SetCookie(&http.Cookie{
@@ -1313,13 +1300,9 @@ func TestClientClone(t *testing.T) {
 	// update value of non-interface type - change will only happen on clone
 	clone.SetBaseURL("https://local.host")
 
-	clone.SetBasicAuth("clone", "clone")
-
 	// assert non-interface type
 	assertEqual(t, "http://localhost", parent.BaseURL())
 	assertEqual(t, "https://local.host", clone.BaseURL())
-	assertEqual(t, "parent", parent.credentials.Username)
-	assertEqual(t, "clone", clone.credentials.Username)
 
 	// assert interface/pointer type
 	assertEqual(t, parent.Client(), clone.Client())

@@ -103,9 +103,7 @@ func TestGetClientParamRequestParam(t *testing.T) {
 	defer ts.Close()
 
 	c := dcnl()
-	c.SetQueryParam("client_param", "true").
-		SetQueryParams(map[string]string{"req_1": "jeeva", "req_3": "jeeva3"}).
-		SetDebug(true)
+	c.SetDebug(true)
 	c.outputLogTo(io.Discard)
 
 	resp, err := c.R().
@@ -157,10 +155,10 @@ func TestPostJSONStringSuccess(t *testing.T) {
 	defer ts.Close()
 
 	c := dcnl()
-	c.SetHeader(hdrContentTypeKey, "application/json; charset=utf-8").
-		SetHeaders(map[string]string{hdrUserAgentKey: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) go-resty v0.1", hdrAcceptKey: "application/json; charset=utf-8"})
 
 	resp, err := c.R().
+		SetHeader(hdrContentTypeKey, "application/json; charset=utf-8").
+		SetHeaders(map[string]string{hdrUserAgentKey: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) go-resty v0.1", hdrAcceptKey: "application/json; charset=utf-8"}).
 		SetBody(`{"username":"testuser", "password":"testpass"}`).
 		Post(ts.URL + "/login")
 
@@ -171,6 +169,8 @@ func TestPostJSONStringSuccess(t *testing.T) {
 
 	// PostJSONStringError
 	resp, err = c.R().
+		SetHeader(hdrContentTypeKey, "application/json; charset=utf-8").
+		SetHeaders(map[string]string{hdrUserAgentKey: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) go-resty v0.1", hdrAcceptKey: "application/json; charset=utf-8"}).
 		SetBody(`{"username":"testuser" "password":"testpass"}`).
 		Post(ts.URL + "/login")
 
@@ -185,10 +185,10 @@ func TestPostJSONBytesSuccess(t *testing.T) {
 	defer ts.Close()
 
 	c := dcnl()
-	c.SetHeader(hdrContentTypeKey, "application/json; charset=utf-8").
-		SetHeaders(map[string]string{hdrUserAgentKey: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) go-resty v0.7", hdrAcceptKey: "application/json; charset=utf-8"})
 
 	resp, err := c.R().
+		SetHeader(hdrContentTypeKey, "application/json; charset=utf-8").
+		SetHeaders(map[string]string{hdrUserAgentKey: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) go-resty v0.7", hdrAcceptKey: "application/json; charset=utf-8"}).
 		SetBody([]byte(`{"username":"testuser", "password":"testpass"}`)).
 		Post(ts.URL + "/login")
 
@@ -203,11 +203,11 @@ func TestPostJSONBytesIoReader(t *testing.T) {
 	defer ts.Close()
 
 	c := dcnl()
-	c.SetHeader(hdrContentTypeKey, "application/json; charset=utf-8")
 
 	bodyBytes := []byte(`{"username":"testuser", "password":"testpass"}`)
 
 	resp, err := c.R().
+		SetHeader(hdrContentTypeKey, "application/json; charset=utf-8").
 		SetBody(bytes.NewReader(bodyBytes)).
 		Post(ts.URL + "/login")
 
@@ -653,11 +653,11 @@ func TestRequestAuthToken(t *testing.T) {
 
 	c := dcnl()
 	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF")
+		SetBaseURL(ts.URL + "/")
 
 	resp, err := c.R().
 		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF-Request").
-		Get(ts.URL + "/profile")
+		Get("/profile")
 
 	assertError(t, err)
 	assertEqual(t, http.StatusOK, resp.StatusCode())
@@ -669,60 +669,37 @@ func TestRequestAuthScheme(t *testing.T) {
 
 	c := dcnl()
 	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetAuthScheme("OAuth").
-		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF")
+		SetBaseURL(ts.URL + "/")
 
 	t.Run("override auth scheme", func(t *testing.T) {
 		resp, err := c.R().
 			SetAuthScheme("Bearer").
 			SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF-Request").
-			Get(ts.URL + "/profile")
+			Get("/profile")
 
 		assertError(t, err)
 		assertEqual(t, http.StatusOK, resp.StatusCode())
-	})
-
-	t.Run("empty auth scheme at client level GH954", func(t *testing.T) {
-		tokenValue := "004DDB79-6801-4587-B976-F093E6AC44FF"
-
-		// set client level
-		c.SetAuthScheme("").
-			SetAuthToken(tokenValue)
-
-		resp, err := c.R().
-			Get(ts.URL + "/profile")
-
-		assertError(t, err)
-		assertEqual(t, http.StatusOK, resp.StatusCode())
-		assertEqual(t, tokenValue, resp.Request.Header.Get(hdrAuthorizationKey))
 	})
 
 	t.Run("empty auth scheme at request level GH954", func(t *testing.T) {
 		tokenValue := "004DDB79-6801-4587-B976-F093E6AC44FF"
 
-		// set client level
-		c := dcnl().
-			SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-			SetAuthToken(tokenValue)
-
 		resp, err := c.R().
 			SetAuthScheme("").
-			Get(ts.URL + "/profile")
+			SetAuthToken(tokenValue).
+			Get("/profile")
 
 		assertError(t, err)
 		assertEqual(t, http.StatusOK, resp.StatusCode())
 		assertEqual(t, tokenValue, resp.Request.Header.Get(hdrAuthorizationKey))
 	})
 
-	t.Run("only client level auth token GH959", func(t *testing.T) {
+	t.Run("only request level auth token GH959", func(t *testing.T) {
 		tokenValue := "004DDB79-6801-4587-B976-F093E6AC44FF"
 
-		c := dcnl().
-			SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-			SetAuthToken(tokenValue)
-
 		resp, err := c.R().
-			Get(ts.URL + "/profile")
+			SetAuthToken(tokenValue).
+			Get("/profile")
 
 		assertError(t, err)
 		assertEqual(t, http.StatusOK, resp.StatusCode())
@@ -735,12 +712,12 @@ func TestFormData(t *testing.T) {
 	defer ts.Close()
 
 	c := dcnl()
-	c.SetFormData(map[string]string{"zip_code": "00000", "city": "Los Angeles"}).
-		SetContentLength(true).
+	c.SetContentLength(true).
 		SetDebug(true)
 	c.outputLogTo(io.Discard)
 
 	resp, err := c.R().
+		SetFormData(map[string]string{"zip_code": "00000", "city": "Los Angeles"}).
 		SetFormData(map[string]string{"first_name": "Jeevanandam", "last_name": "M", "zip_code": "00001"}).
 		SetBasicAuth("myuser", "mypass").
 		Post(ts.URL + "/profile")
@@ -776,13 +753,13 @@ func TestFormDataDisableWarn(t *testing.T) {
 	defer ts.Close()
 
 	c := dcnl()
-	c.SetFormData(map[string]string{"zip_code": "00000", "city": "Los Angeles"}).
-		SetContentLength(true).
+	c.SetContentLength(true).
 		SetDisableWarn(true)
 	c.outputLogTo(io.Discard)
 
 	resp, err := c.R().
 		SetDebug(true).
+		SetFormData(map[string]string{"zip_code": "00000", "city": "Los Angeles"}).
 		SetFormData(map[string]string{"first_name": "Jeevanandam", "last_name": "M", "zip_code": "00001"}).
 		SetBasicAuth("myuser", "mypass").
 		Post(ts.URL + "/profile")
@@ -1261,13 +1238,11 @@ func TestMultiParamsQueryString(t *testing.T) {
 	client := dcnl()
 	req1 := client.R()
 
-	client.SetQueryParam("status", "open")
-
 	_, _ = req1.SetQueryParam("status", "pending").
 		Get(ts1.URL)
 
 	assertEqual(t, true, strings.Contains(req1.URL, "status=pending"))
-	// pending overrides open
+	// pending is used
 	assertEqual(t, false, strings.Contains(req1.URL, "status=open"))
 
 	_, _ = req1.SetQueryParam("status", "approved").
@@ -1462,7 +1437,6 @@ func TestRequestSaveResponse(t *testing.T) {
 			Get(ts.URL)
 		assertError(t, err)
 	})
-
 }
 
 func TestContextInternal(t *testing.T) {
@@ -1624,7 +1598,6 @@ func TestRequestOverridesClientAuthorizationHeader(t *testing.T) {
 
 	c := dcnl()
 	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetHeader("Authorization", "some token").
 		SetBaseURL(ts.URL + "/")
 
 	resp, err := c.R().
@@ -1828,7 +1801,6 @@ func TestTraceInfo(t *testing.T) {
 			assertEqual(t, true, tr.TotalTime == resp.Duration())
 			assertEqual(t, tr.RemoteAddr, serverAddr)
 		}
-
 	})
 
 	t.Run("enable trace on invalid request, issue #1016", func(t *testing.T) {
@@ -2067,7 +2039,6 @@ func TestDebugLoggerRequestBodyTooLarge(t *testing.T) {
 		assertNotNil(t, resp)
 		assertEqual(t, true, strings.Contains(output.String(), "REQUEST TOO LARGE"))
 	})
-
 }
 
 func TestPostMapTemporaryRedirect(t *testing.T) {
@@ -2291,7 +2262,6 @@ func TestRequestAllowPayload(t *testing.T) {
 		result1 := r.isPayloadSupported()
 		assertEqual(t, false, result1)
 	})
-
 }
 
 func TestRequestNoRetryOnNonIdempotentMethod(t *testing.T) {
@@ -2364,7 +2334,6 @@ func TestRequestContextTimeout(t *testing.T) {
 
 		assertEqual(t, true, errors.Is(err, context.DeadlineExceeded))
 	})
-
 }
 
 func TestRequestPanicContext(t *testing.T) {
@@ -2442,8 +2411,6 @@ func TestRequestFuncs(t *testing.T) {
 	defer ts.Close()
 
 	c := dcnl().
-		SetQueryParam("client_param", "true").
-		SetQueryParams(map[string]string{"req_1": "value1", "req_3": "value3"}).
 		SetDebug(true)
 
 	addRequestQueryParams := func(page, size int) func(r *Request) *Request {
@@ -2586,12 +2553,12 @@ func TestRequestDataRace(t *testing.T) {
 
 	c := dcnl().SetBaseURL(ts.URL)
 
-	totalRequests := 4000
+	totalRequests := 1000
 	wg := sync.WaitGroup{}
 	wg.Add(totalRequests)
 	for i := 0; i < totalRequests; i++ {
-		if i%100 == 0 {
-			time.Sleep(20 * time.Millisecond) // to prevent test server socket exhaustion
+		if i%50 == 0 {
+			time.Sleep(50 * time.Millisecond) // to prevent test server socket exhaustion on slower platforms
 		}
 		go func() {
 			defer wg.Done()

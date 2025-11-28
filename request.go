@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -1276,6 +1275,17 @@ func (r *Request) TraceInfo() TraceInfo {
 		requestStartTime = ct.dnsStart
 	}
 	ti.TotalTime = ct.endTime.Sub(requestStartTime)
+	if ti.TotalTime <= 0 {
+		// provide a minimal duration fallback for scenarios where the request fails
+		// before the monotonic clock advances (for example, invalid schemes).
+		// this keeps TotalTime informative for callers that expect a positive value.
+		if !requestStartTime.IsZero() {
+			ti.TotalTime = time.Since(requestStartTime)
+		}
+		if ti.TotalTime <= 0 {
+			ti.TotalTime = time.Nanosecond
+		}
+	}
 
 	// Only calculate on successful connections
 	if !ct.connectDone.IsZero() {
@@ -1738,9 +1748,10 @@ func (r *Request) sendLoadBalancerFeedback(res *Response, err error) {
 	// so that we can prevent sending the request to
 	// that server which may fail
 	if err != nil {
+		success = false
 		var noe *net.OpError
-		if errors.As(err, &noe) {
-			success = !errors.Is(noe.Err, syscall.ECONNREFUSED) || noe.Timeout()
+		if errors.As(err, &noe) && noe.Timeout() {
+			success = true
 		}
 	}
 	if success && res != nil &&

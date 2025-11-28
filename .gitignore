@@ -27,5 +27,6 @@ coverage.out
 coverage.txt
 
 # Exclude IDE folders
+.claude/*
 .idea/*
 .vscode/*

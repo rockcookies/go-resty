@@ -29,10 +29,10 @@ func TestMultipartFormDataAndUpload(t *testing.T) {
 	defer cleanupFiles(".testdata/upload")
 
 	c := dcnl()
-	c.SetFormData(map[string]string{"zip_code": "00001", "city": "Los Angeles"})
 
 	t.Run("form data and upload", func(t *testing.T) {
 		resp, err := c.R().
+			SetFormData(map[string]string{"zip_code": "00001", "city": "Los Angeles"}).
 			SetFile("profile_img", filepath.Join(getTestDataPath(), "test-img.png")).
 			SetContentLength(true).
 			Post(ts.URL + "/upload")
@@ -65,10 +65,9 @@ func TestMultipartFormDataAndUploadMethodPatch(t *testing.T) {
 	defer cleanupFiles(".testdata/upload")
 
 	c := dcnl()
-	c.SetFormData(map[string]string{"zip_code": "00001", "city": "Los Angeles"})
 
 	resp, err := c.R().
-		SetFormData(map[string]string{"zip_code": "00002", "city": "Los Angeles"}).
+		SetFormData(map[string]string{"zip_code": "00001", "city": "Los Angeles"}).
 		SetFile("profile_img", filepath.Join(getTestDataPath(), "test-img.png")).
 		SetContentLength(true).
 		Patch(ts.URL + "/upload")
@@ -84,9 +83,9 @@ func TestMultipartUploadError(t *testing.T) {
 	defer cleanupFiles(".testdata/upload")
 
 	c := dcnl()
-	c.SetFormData(map[string]string{"zip_code": "00001", "city": "Los Angeles"})
 
 	resp, err := c.R().
+		SetFormData(map[string]string{"zip_code": "00001", "city": "Los Angeles"}).
 		SetFile("profile_img", filepath.Join(getTestDataPath(), "test-img-not-exists.png")).
 		Post(ts.URL + "/upload")
 
@@ -647,8 +646,7 @@ func TestMultipartRequest_createMultipart(t *testing.T) {
 	})
 }
 
-type returnValueTestWriter struct {
-}
+type returnValueTestWriter struct{}
 
 func (z *returnValueTestWriter) Write(p []byte) (n int, err error) {
 	return 0, nil

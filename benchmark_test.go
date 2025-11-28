@@ -36,11 +36,11 @@ func Benchmark_parseRequestURL_PathParams(b *testing.B) {
 }
 
 func Benchmark_parseRequestURL_QueryParams(b *testing.B) {
-	c := New().SetQueryParams(map[string]string{
+	c := New()
+	r := c.R().SetQueryParams(map[string]string{
 		"foo": "1",
 		"bar": "2",
-	})
-	r := c.R().SetQueryParams(map[string]string{
+	}).SetQueryParams(map[string]string{
 		"foo": "5",
 		"qwe": "6",
 	})
@@ -55,12 +55,10 @@ func Benchmark_parseRequestURL_QueryParams(b *testing.B) {
 
 func Benchmark_parseRequestHeader(b *testing.B) {
 	c := New()
-	r := c.R()
-	c.SetHeaders(map[string]string{
-		"foo": "1", // ignored, because of the same header in the request
+	r := c.R().SetHeaders(map[string]string{
+		"foo": "1",
 		"bar": "2",
-	})
-	r.SetHeaders(map[string]string{
+	}).SetHeaders(map[string]string{
 		"foo": "3",
 		"xyz": "4",
 	})
@@ -169,9 +167,8 @@ func Benchmark_parseRequestBody_slice(b *testing.B) {
 
 func Benchmark_parseRequestBody_FormData(b *testing.B) {
 	c := New()
-	r := c.R()
-	c.SetFormData(map[string]string{"foo": "1", "bar": "2"})
-	r.SetFormData(map[string]string{"foo": "3", "baz": "4"}).SetContentLength(true)
+	r := c.R().SetFormData(map[string]string{"foo": "1", "bar": "2"}).
+		SetFormData(map[string]string{"foo": "3", "baz": "4"}).SetContentLength(true)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		if err := parseRequestBody(c, r); err != nil {
@@ -182,9 +179,8 @@ func Benchmark_parseRequestBody_FormData(b *testing.B) {
 
 func Benchmark_parseRequestBody_MultiPart(b *testing.B) {
 	c := New()
-	r := c.R()
-	c.SetFormData(map[string]string{"foo": "1", "bar": "2"})
-	r.SetFormData(map[string]string{"foo": "3", "baz": "4"}).
+	r := c.R().SetFormData(map[string]string{"foo": "1", "bar": "2"}).
+		SetFormData(map[string]string{"foo": "3", "baz": "4"}).
 		SetMultipartFormData(map[string]string{"foo": "5", "xyz": "6"}).
 		SetFileReader("qwe", "qwe.txt", strings.NewReader("7")).
 		SetMultipartFields(

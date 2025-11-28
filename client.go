@@ -167,19 +167,11 @@ type TransportSettings struct {
 type Client struct {
 	lock                     *sync.RWMutex
 	baseURL                  string
-	queryParams              url.Values
-	formData                 url.Values
 	pathParams               map[string]string
-	header                   http.Header
-	credentials              *credentials
-	authToken                string
-	authScheme               string
 	cookies                  []*http.Cookie
 	errorType                reflect.Type
 	debug                    bool
 	disableWarn              bool
-	allowMethodGetPayload    bool
-	allowMethodDeletePayload bool
 	timeout                  time.Duration
 	retryCount               int
 	retryWaitTime            time.Duration
@@ -189,7 +181,6 @@ type Client struct {
 	retryStrategy            RetryStrategyFunc
 	isRetryDefaultConditions bool
 	allowNonIdempotentRetry  bool
-	headerAuthorizationKey   string
 	responseBodyLimit        int64
 	resBodyUnlimitedReads    bool
 	jsonEscapeHTML           bool
@@ -209,7 +200,6 @@ type Client struct {
 	debugLogCallback         DebugLogCallbackFunc
 	generateCurlCmd          bool
 	debugLogCurlCmd          bool
-	unescapeQueryParams      bool
 	loadBalancer             LoadBalancer
 	beforeRequest            []RequestMiddleware
 	afterResponse            []ResponseMiddleware
@@ -264,70 +254,6 @@ func (c *Client) SetLoadBalancer(b LoadBalancer) *Client {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.loadBalancer = b
-	return c
-}
-
-// Header method returns the headers from the client instance.
-func (c *Client) Header() http.Header {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.header
-}
-
-// SetHeader method sets a single header and its value in the client instance.
-// These headers will be applied to all requests raised from the client instance.
-// Also, it can be overridden by request-level header options.
-//
-// For Example: To set `Content-Type` and `Accept` as `application/json`
-//
-//	client.
-//		SetHeader("Content-Type", "application/json").
-//		SetHeader("Accept", "application/json")
-//
-// See [Request.SetHeader] or [Request.SetHeaders].
-func (c *Client) SetHeader(header, value string) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.header.Set(header, value)
-	return c
-}
-
-// SetHeaders method sets multiple headers and their values at one go, and
-// these headers will be applied to all requests raised from the client instance.
-// Also, it can be overridden at request-level headers options.
-//
-// For Example: To set `Content-Type` and `Accept` as `application/json`
-//
-//	client.SetHeaders(map[string]string{
-//		"Content-Type": "application/json",
-//		"Accept": "application/json",
-//	})
-//
-// See [Request.SetHeaders] or [Request.SetHeader].
-func (c *Client) SetHeaders(headers map[string]string) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	for h, v := range headers {
-		c.header.Set(h, v)
-	}
-	return c
-}
-
-// SetHeaderVerbatim method is used to set the HTTP header key and value verbatim in the current request.
-// It is typically helpful for legacy applications or servers that require HTTP headers in a certain way
-//
-// For Example: To set header key as `all_lowercase`, `UPPERCASE`, and `x-cloud-trace-id`
-//
-//	client.
-//		SetHeaderVerbatim("all_lowercase", "available").
-//		SetHeaderVerbatim("UPPERCASE", "available").
-//		SetHeaderVerbatim("x-cloud-trace-id", "798e94019e5fc4d57fbb8901eb4c6cae")
-//
-// See [Request.SetHeaderVerbatim].
-func (c *Client) SetHeaderVerbatim(header, value string) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.header[header] = []string{value}
 	return c
 }
 
@@ -409,203 +335,21 @@ func (c *Client) SetCookies(cs []*http.Cookie) *Client {
 	return c
 }
 
-// QueryParams method returns all query parameters and their values from the client instance.
-func (c *Client) QueryParams() url.Values {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.queryParams
-}
-
-// SetQueryParam method sets a single parameter and its value in the client instance.
-// It will be formed as a query string for the request.
+// UseDigestAuth sets up digest authentication for this client using a transport wrapper.
+// This wraps the current transport with a digest auth transport.
 //
-//	For Example: `search=kitchen%20papers&size=large`
+// Example:
 //
-// In the URL after the `?` mark. These query params will be added to all the requests raised from
-// this client instance. Also, it can be overridden at the request level.
+//	c := resty.New()
+//	c.UseDigestAuth("username", "password")
 //
-// See [Request.SetQueryParam] or [Request.SetQueryParams].
-//
-//	client.
-//		SetQueryParam("search", "kitchen papers").
-//		SetQueryParam("size", "large")
-func (c *Client) SetQueryParam(param, value string) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.queryParams.Set(param, value)
-	return c
-}
-
-// SetQueryParams method sets multiple parameters and their values at one go in the client instance.
-// It will be formed as a query string for the request.
-//
-//	For Example: `search=kitchen%20papers&size=large`
-//
-// In the URL after the `?` mark. These query params will be added to all the requests raised from this
-// client instance. Also, it can be overridden at the request level.
-//
-// See [Request.SetQueryParams] or [Request.SetQueryParam].
-//
-//	client.SetQueryParams(map[string]string{
-//		"search": "kitchen papers",
-//		"size": "large",
-//	})
-func (c *Client) SetQueryParams(params map[string]string) *Client {
-	// Do not lock here since there is potential deadlock.
-	for p, v := range params {
-		c.SetQueryParam(p, v)
-	}
-	return c
-}
-
-// FormData method returns the form parameters and their values from the client instance.
-func (c *Client) FormData() url.Values {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.formData
-}
-
-// SetFormData method sets Form parameters and their values in the client instance.
-// The request content type would be set as `application/x-www-form-urlencoded`.
-// The client-level form data gets added to all the requests. Also, it can be
-// overridden at the request level.
-//
-// See [Request.SetFormData].
-//
-//	client.SetFormData(map[string]string{
-//		"access_token": "BC594900-518B-4F7E-AC75-BD37F019E08F",
-//		"user_id": "3455454545",
-//	})
-func (c *Client) SetFormData(data map[string]string) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	for k, v := range data {
-		c.formData.Set(k, v)
-	}
-	return c
-}
-
-// SetBasicAuth method sets the basic authentication header in the HTTP request. For Example:
-//
-//	Authorization: Basic <base64-encoded-value>
-//
-// For Example: To set the header for username "go-resty" and password "welcome"
-//
-//	client.SetBasicAuth("go-resty", "welcome")
-//
-// This basic auth information is added to all requests from this client instance.
-// It can also be overridden at the request level.
-//
-// See [Request.SetBasicAuth].
-func (c *Client) SetBasicAuth(username, password string) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.credentials = &credentials{Username: username, Password: password}
-	return c
-}
-
-// AuthToken method returns the auth token value registered in the client instance.
-func (c *Client) AuthToken() string {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.authToken
-}
-
-// HeaderAuthorizationKey method returns the HTTP header name for Authorization from the client instance.
-func (c *Client) HeaderAuthorizationKey() string {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.headerAuthorizationKey
-}
-
-// SetHeaderAuthorizationKey method sets the given HTTP header name for Authorization in the client instance.
-//
-// It can be overridden at the request level; see [Request.SetHeaderAuthorizationKey].
-//
-//	client.SetHeaderAuthorizationKey("X-Custom-Authorization")
-func (c *Client) SetHeaderAuthorizationKey(k string) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.headerAuthorizationKey = k
-	return c
-}
-
-// SetAuthToken method sets the auth token of the `Authorization` header for all HTTP requests.
-// The default auth scheme is `Bearer`; it can be customized with the method [Client.SetAuthScheme]. For Example:
-//
-//	Authorization: <auth-scheme> <auth-token-value>
-//
-// For Example: To set auth token BC594900518B4F7EAC75BD37F019E08FBC594900518B4F7EAC75BD37F019E08F
-//
-//	client.SetAuthToken("BC594900518B4F7EAC75BD37F019E08FBC594900518B4F7EAC75BD37F019E08F")
-//
-// This auth token gets added to all the requests raised from this client instance.
-// Also, it can be overridden at the request level.
-//
-// See [Request.SetAuthToken].
-func (c *Client) SetAuthToken(token string) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.authToken = token
-	return c
-}
-
-// AuthScheme method returns the auth scheme name set in the client instance.
-//
-// See [Client.SetAuthScheme], [Request.SetAuthScheme].
-func (c *Client) AuthScheme() string {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.authScheme
-}
-
-// SetAuthScheme method sets the auth scheme type in the HTTP request. For Example:
-//
-//	Authorization: <auth-scheme-value> <auth-token-value>
-//
-// For Example: To set the scheme to use OAuth
-//
-//	client.SetAuthScheme("OAuth")
-//
-// This auth scheme gets added to all the requests raised from this client instance.
-// Also, it can be overridden at the request level.
-//
-// Information about auth schemes can be found in [RFC 7235], IANA [HTTP Auth schemes].
-//
-// See [Request.SetAuthScheme].
-//
-// [RFC 7235]: https://tools.ietf.org/html/rfc7235
-// [HTTP Auth schemes]: https://www.iana.org/assignments/http-authschemes/http-authschemes.xhtml#authschemes
-func (c *Client) SetAuthScheme(scheme string) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.authScheme = scheme
-	return c
-}
-
-// SetDigestAuth method sets the Digest Auth transport with provided credentials in the client.
-// If a server responds with 401 and sends a Digest challenge in the header `WWW-Authenticate`,
-// the request will be resent with the appropriate digest `Authorization` header.
-//
-// For Example: To set the Digest scheme with user "Mufasa" and password "Circle Of Life"
-//
-//	client.SetDigestAuth("Mufasa", "Circle Of Life")
-//
-// Information about Digest Access Authentication can be found in [RFC 7616].
-//
-// NOTE:
-//   - On the QOP `auth-int` scenario, the request body is read into memory to
-//     compute the body hash that increases memory usage.
-//   - Create a dedicated client instance to use digest auth,
-//     as it does digest auth for all the requests raised by the client.
+// NOTE: Create a dedicated client instance to use digest auth,
+// as it does digest auth for all the requests raised by the client.
+// For auth-int scenario, the request body is read into memory to compute the body hash.
 //
 // [RFC 7616]: https://datatracker.ietf.org/doc/html/rfc7616
-func (c *Client) SetDigestAuth(username, password string) *Client {
-	dt := &digestTransport{
-		credentials: &credentials{username, password},
-		transport:   c.Transport(),
-	}
-	c.SetTransport(dt)
+func (c *Client) UseDigestAuth(username, password string) *Client {
+	c.SetTransport(NewDigestTransport(username, password, c.Transport()))
 	return c
 }
 
@@ -623,8 +367,6 @@ func (c *Client) R() *Request {
 		Debug:                      c.debug,
 		IsTrace:                    c.isTrace,
 		IsSaveResponse:             c.isSaveResponse,
-		AuthScheme:                 c.authScheme,
-		AuthToken:                  c.authToken,
 		RetryCount:                 c.retryCount,
 		RetryWaitTime:              c.retryWaitTime,
 		RetryMaxWaitTime:           c.retryMaxWaitTime,
@@ -635,23 +377,20 @@ func (c *Client) R() *Request {
 		DebugBodyLimit:             c.debugBodyLimit,
 		ResponseBodyLimit:          c.responseBodyLimit,
 		ResponseBodyUnlimitedReads: c.resBodyUnlimitedReads,
-		AllowMethodGetPayload:      c.allowMethodGetPayload,
-		AllowMethodDeletePayload:   c.allowMethodDeletePayload,
 		AllowNonIdempotentRetry:    c.allowNonIdempotentRetry,
-		HeaderAuthorizationKey:     c.headerAuthorizationKey,
+		AuthScheme:                 defaultAuthScheme,
+		HeaderAuthorizationKey:     hdrAuthorizationKey,
 
-		client:              c,
-		baseURL:             c.baseURL,
-		multipartFields:     make([]*MultipartField, 0),
-		jsonEscapeHTML:      c.jsonEscapeHTML,
-		log:                 c.log,
-		setContentLength:    c.setContentLength,
-		generateCurlCmd:     c.generateCurlCmd,
-		debugLogCurlCmd:     c.debugLogCurlCmd,
-		unescapeQueryParams: c.unescapeQueryParams,
-		credentials:         c.credentials,
-		retryConditions:     slices.Clone(c.retryConditions),
-		retryHooks:          slices.Clone(c.retryHooks),
+		client:           c,
+		baseURL:          c.baseURL,
+		multipartFields:  make([]*MultipartField, 0),
+		jsonEscapeHTML:   c.jsonEscapeHTML,
+		log:              c.log,
+		setContentLength: c.setContentLength,
+		generateCurlCmd:  c.generateCurlCmd,
+		debugLogCurlCmd:  c.debugLogCurlCmd,
+		retryConditions:  slices.Clone(c.retryConditions),
+		retryHooks:       slices.Clone(c.retryHooks),
 	}
 
 	if c.ctx != nil {
@@ -1070,52 +809,6 @@ func (c *Client) SetDisableWarn(d bool) *Client {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.disableWarn = d
-	return c
-}
-
-// AllowMethodGetPayload method returns `true` if the client is enabled to allow
-// payload with GET method; otherwise, it is `false`.
-func (c *Client) AllowMethodGetPayload() bool {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.allowMethodGetPayload
-}
-
-// SetAllowMethodGetPayload method allows the GET method with payload on the Resty client.
-// By default, Resty does not allow.
-//
-//	client.SetAllowMethodGetPayload(true)
-//
-// It can be overridden at the request level. See [Request.SetAllowMethodGetPayload]
-func (c *Client) SetAllowMethodGetPayload(allow bool) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.allowMethodGetPayload = allow
-	return c
-}
-
-// AllowMethodDeletePayload method returns `true` if the client is enabled to allow
-// payload with DELETE method; otherwise, it is `false`.
-//
-// More info, refer to GH#881
-func (c *Client) AllowMethodDeletePayload() bool {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.allowMethodDeletePayload
-}
-
-// SetAllowMethodDeletePayload method allows the DELETE method with payload on the Resty client.
-// By default, Resty does not allow.
-//
-//	client.SetAllowMethodDeletePayload(true)
-//
-// More info, refer to GH#881
-//
-// It can be overridden at the request level. See [Request.SetAllowMethodDeletePayload]
-func (c *Client) SetAllowMethodDeletePayload(allow bool) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.allowMethodDeletePayload = allow
 	return c
 }
 
@@ -2041,19 +1734,6 @@ func (c *Client) SetDebugLogCurlCmd(b bool) *Client {
 	return c
 }
 
-// SetUnescapeQueryParams method sets the choice of unescape query parameters for the request URL.
-// To prevent broken URL, Resty replaces space (" ") with "+" in the query parameters.
-//
-// See [Request.SetUnescapeQueryParams]
-//
-// NOTE: Request failure is possible due to non-standard usage of Unescaped Query Parameters.
-func (c *Client) SetUnescapeQueryParams(unescape bool) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.unescapeQueryParams = unescape
-	return c
-}
-
 // ResponseBodyUnlimitedReads method returns true if enabled. Otherwise, it returns false
 func (c *Client) ResponseBodyUnlimitedReads() bool {
 	c.lock.RLock()
@@ -2105,14 +1785,7 @@ func (c *Client) Clone(ctx context.Context) *Client {
 	*cc = *c
 
 	cc.ctx = ctx
-	cc.queryParams = cloneURLValues(c.queryParams)
-	cc.formData = cloneURLValues(c.formData)
-	cc.header = c.header.Clone()
 	cc.pathParams = maps.Clone(c.pathParams)
-
-	if c.credentials != nil {
-		cc.credentials = c.credentials.Clone()
-	}
 
 	cc.contentTypeEncoders = maps.Clone(c.contentTypeEncoders)
 	cc.contentTypeDecoders = maps.Clone(c.contentTypeDecoders)

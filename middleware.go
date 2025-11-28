@@ -41,7 +41,9 @@ func PrepareRequestMiddleware(c *Client, r *Request) (err error) {
 
 	// at this point, possible error from `http.NewRequestWithContext`
 	// is URL-related, and those get caught up in the `parseRequestURL`
-	createRawRequest(c, r)
+	if err = createRawRequest(c, r); err != nil {
+		return err
+	}
 
 	addCredentials(c, r)
 
@@ -142,14 +144,7 @@ func parseRequestURL(c *Client, r *Request) error {
 	}
 
 	// Adding Query Param
-	if len(c.QueryParams())+len(r.QueryParams) > 0 {
-		for k, v := range c.QueryParams() {
-			if _, ok := r.QueryParams[k]; ok {
-				continue
-			}
-			r.QueryParams[k] = v[:]
-		}
-
+	if len(r.QueryParams) > 0 {
 		// GitHub #123 Preserve query string order partially.
 		// Since not feasible in `SetQuery*` resty methods, because
 		// standard package `url.Encode(...)` sorts the query params
@@ -176,13 +171,6 @@ func parseRequestURL(c *Client, r *Request) error {
 }
 
 func parseRequestHeader(c *Client, r *Request) error {
-	for k, v := range c.Header() {
-		if _, ok := r.Header[k]; ok {
-			continue
-		}
-		r.Header[k] = v[:]
-	}
-
 	if !r.isHeaderExists(hdrUserAgentKey) {
 		r.Header.Set(hdrUserAgentKey, hdrUserAgentValue)
 	}
@@ -206,7 +194,7 @@ func parseRequestBody(c *Client, r *Request) error {
 			if err := handleMultipart(c, r); err != nil {
 				return &invalidRequestError{Err: err}
 			}
-		case len(c.FormData()) > 0 || len(r.FormData) > 0: // Handling Form Data
+		case len(r.FormData) > 0: // Handling Form Data
 			handleFormData(c, r)
 		case r.Body != nil: // Handling Request body
 			if err := handleRequestBody(c, r); err != nil {
@@ -295,13 +283,6 @@ func addCredentials(c *Client, r *Request) error {
 }
 
 func handleMultipart(c *Client, r *Request) error {
-	for k, v := range c.FormData() {
-		if _, ok := r.FormData[k]; ok {
-			continue
-		}
-		r.FormData[k] = v[:]
-	}
-
 	mfLen := len(r.multipartFields)
 	if mfLen == 0 {
 		r.bodyBuf = acquireBuffer()
@@ -398,13 +379,6 @@ func createMultipart(w *multipart.Writer, r *Request) error {
 }
 
 func handleFormData(c *Client, r *Request) {
-	for k, v := range c.FormData() {
-		if _, ok := r.FormData[k]; ok {
-			continue
-		}
-		r.FormData[k] = v[:]
-	}
-
 	r.bodyBuf = acquireBuffer()
 	r.bodyBuf.WriteString(r.FormData.Encode())
 	r.Header.Set(hdrContentTypeKey, formContentType)

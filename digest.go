@@ -48,6 +48,28 @@ const (
 	qopAuthInt = "auth-int"
 )
 
+// NewDigestTransport creates a new digest authentication transport wrapper.
+// It wraps the provided http.RoundTripper to add RFC 7616 digest authentication.
+// If base is nil, http.DefaultTransport is used.
+//
+// Example usage:
+//
+//	c := resty.New()
+//	c.SetTransport(resty.NewDigestTransport("username", "password", c.Transport()))
+//
+// Or use the convenience method:
+//
+//	c.UseDigestAuth("username", "password")
+func NewDigestTransport(username, password string, base http.RoundTripper) http.RoundTripper {
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return &digestTransport{
+		credentials: &credentials{Username: username, Password: password},
+		transport:   base,
+	}
+}
+
 type digestTransport struct {
 	*credentials
 	transport http.RoundTripper

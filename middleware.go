@@ -173,7 +173,7 @@ func parseRequestHeader(c *Client, r *Request) error {
 	}
 
 	if !r.isHeaderExists(hdrAcceptEncodingKey) {
-		r.Header.Set(hdrAcceptEncodingKey, r.client.ContentDecompresserKeys())
+		r.Header.Set(hdrAcceptEncodingKey, r.client.ContentDecompressorKeys())
 	}
 
 	return nil

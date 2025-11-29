@@ -23,7 +23,14 @@ import (
 	"strings"
 )
 
+// credentials type is to hold username and password for digest authentication
+type credentials struct {
+	Username, Password string
+}
+
 var (
+	hdrAuthorizationKey = http.CanonicalHeaderKey("Authorization")
+
 	ErrDigestBadChallenge    = errors.New("resty: digest: challenge is bad")
 	ErrDigestInvalidCharset  = errors.New("resty: digest: invalid charset")
 	ErrDigestAlgNotSupported = errors.New("resty: digest: algorithm is not supported")

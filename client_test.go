@@ -30,67 +30,6 @@ import (
 	"time"
 )
 
-func TestClientBasicAuth(t *testing.T) {
-	ts := createAuthServer(t)
-	defer ts.Close()
-
-	c := dcnl()
-	c.SetBaseURL(ts.URL).
-		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
-
-	resp, err := c.R().
-		SetBasicAuth("myuser", "basicauth").
-		SetResult(&AuthSuccess{}).
-		Post("/login")
-
-	assertError(t, err)
-	assertEqual(t, http.StatusOK, resp.StatusCode())
-
-	t.Logf("Result Success: %q", resp.Result().(*AuthSuccess))
-	logResponse(t, resp)
-}
-
-func TestClientAuthToken(t *testing.T) {
-	ts := createAuthServer(t)
-	defer ts.Close()
-
-	c := dcnl()
-	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetBaseURL(ts.URL + "/")
-
-	resp, err := c.R().
-		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").
-		Get("/profile")
-
-	assertError(t, err)
-	assertEqual(t, http.StatusOK, resp.StatusCode())
-}
-
-func TestClientAuthScheme(t *testing.T) {
-	ts := createAuthServer(t)
-	defer ts.Close()
-
-	c := dcnl()
-	// Ensure default Bearer
-	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetBaseURL(ts.URL + "/")
-
-	resp, err := c.R().
-		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").
-		Get("/profile")
-
-	assertError(t, err)
-	assertEqual(t, http.StatusOK, resp.StatusCode())
-
-	// Ensure setting the scheme works as well
-	r := c.R().SetAuthScheme("Bearer")
-	assertEqual(t, "Bearer", r.AuthScheme)
-
-	resp2, err2 := r.SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").Get("/profile")
-	assertError(t, err2)
-	assertEqual(t, http.StatusOK, resp2.StatusCode())
-}
-
 func TestClientResponseMiddleware(t *testing.T) {
 	ts := createGenericServer(t)
 	defer ts.Close()
@@ -410,7 +349,7 @@ func TestClientSetClientRootCertificateFromString(t *testing.T) {
 func TestClientRequestMiddlewareModification(t *testing.T) {
 	tc := dcnl()
 	tc.AddRequestMiddleware(func(c *Client, r *Request) error {
-		r.SetAuthToken("This is test auth token")
+		r.SetHeader("X-Test-Token", "This is test token")
 		return nil
 	})
 
@@ -497,14 +436,6 @@ func TestClientSettingsCoverage(t *testing.T) {
 	assertEqual(t, time.Second*2, c.RetryMaxWaitTime())
 	assertEqual(t, false, c.IsTrace())
 	assertEqual(t, 0, len(c.RetryConditions()))
-
-	authToken := "sample auth token value"
-	r := c.R().SetAuthToken(authToken)
-	assertEqual(t, authToken, r.AuthToken)
-
-	customAuthHeader := "X-Custom-Authorization"
-	r = c.R().SetHeaderAuthorizationKey(customAuthHeader)
-	assertEqual(t, customAuthHeader, r.HeaderAuthorizationKey)
 
 	c.SetCloseConnection(true)
 
@@ -876,7 +807,7 @@ func TestClientLogCallbacks(t *testing.T) {
 	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
 
 	resp, err := c.R().
-		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF-Request").
+		SetHeader("X-Test-Token", "004DDB79-6801-4587-B976-F093E6AC44FF-Request").
 		Get(ts.URL + "/profile")
 
 	assertError(t, err)
@@ -884,7 +815,6 @@ func TestClientLogCallbacks(t *testing.T) {
 
 	// Validating debug log updates
 	logInfo := lb.String()
-	assertEqual(t, true, strings.Contains(logInfo, "Bearer *******************************"))
 	assertEqual(t, true, strings.Contains(logInfo, "X-Debug-Response-Log"))
 	assertEqual(t, true, strings.Contains(logInfo, "Modified the response body content"))
 
@@ -895,7 +825,7 @@ func TestClientLogCallbacks(t *testing.T) {
 
 	c.OnDebugLog(secondCallback)
 	resp, err = c.R().
-		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF-Request").
+		SetHeader("X-Test-Token", "004DDB79-6801-4587-B976-F093E6AC44FF-Request").
 		Get(ts.URL + "/profile")
 	assertNil(t, err)
 	assertNotNil(t, resp)

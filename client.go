@@ -60,7 +60,6 @@ var (
 	hdrContentLengthKey   = http.CanonicalHeaderKey("Content-Length")
 	hdrContentEncodingKey = http.CanonicalHeaderKey("Content-Encoding")
 	hdrContentDisposition = http.CanonicalHeaderKey("Content-Disposition")
-	hdrAuthorizationKey   = http.CanonicalHeaderKey("Authorization")
 	hdrWwwAuthenticateKey = http.CanonicalHeaderKey("WWW-Authenticate")
 	hdrRetryAfterKey      = http.CanonicalHeaderKey("Retry-After")
 	hdrCookieKey          = http.CanonicalHeaderKey("Cookie")
@@ -71,8 +70,6 @@ var (
 
 	jsonKey = "json"
 	xmlKey  = "xml"
-
-	defaultAuthScheme = "Bearer"
 
 	hdrUserAgentValue = "go-resty/" + Version + " (https://resty.dev)"
 	bufPool           = &sync.Pool{New: func() any { return &bytes.Buffer{} }}
@@ -378,8 +375,6 @@ func (c *Client) R() *Request {
 		ResponseBodyLimit:          c.responseBodyLimit,
 		ResponseBodyUnlimitedReads: c.resBodyUnlimitedReads,
 		AllowNonIdempotentRetry:    c.allowNonIdempotentRetry,
-		AuthScheme:                 defaultAuthScheme,
-		HeaderAuthorizationKey:     hdrAuthorizationKey,
 
 		client:           c,
 		baseURL:          c.baseURL,

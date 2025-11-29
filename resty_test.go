@@ -32,12 +32,9 @@ import (
 	"time"
 )
 
-var (
-	hdrLocationKey = http.CanonicalHeaderKey("Location")
-)
+var hdrLocationKey = http.CanonicalHeaderKey("Location")
 
-//‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
-// Testing Unexported methods
+//‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾�?// Testing Unexported methods
 //___________________________________
 
 func getTestDataPath() string {
@@ -171,7 +168,7 @@ func createGetServer(t *testing.T) *httptest.Server {
 
 func handleLoginEndpoint(t *testing.T, w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/login" {
-		user := &credentials{}
+		user := &testCredentials{}
 
 		// JSON
 		if isJSONContentType(r.Header.Get(hdrContentTypeKey)) {
@@ -383,7 +380,7 @@ func createFormPostServer(t *testing.T) *httptest.Server {
 				t.Logf("LastName: %v", r.FormValue("last_name"))
 
 				targetPath := filepath.Join(getTestDataPath(), "upload")
-				_ = os.MkdirAll(targetPath, 0700)
+				_ = os.MkdirAll(targetPath, 0o700)
 
 				values := r.MultipartForm.Value
 				t.Logf("%v", values)
@@ -398,7 +395,7 @@ func createFormPostServer(t *testing.T) *httptest.Server {
 						t.Logf("Write name: %v", fname)
 
 						infile, _ := hdr.Open()
-						f, err := os.OpenFile(filepath.Join(targetPath, fname), os.O_WRONLY|os.O_CREATE, 0666)
+						f, err := os.OpenFile(filepath.Join(targetPath, fname), os.O_WRONLY|os.O_CREATE, 0o666)
 						if err != nil {
 							t.Logf("Error: %v", err)
 							return
@@ -417,14 +414,12 @@ func createFormPostServer(t *testing.T) *httptest.Server {
 		}
 
 		if r.Method == MethodPut {
-
 			if r.URL.Path == "/raw-upload" {
 				body, _ := io.ReadAll(r.Body)
 				bl, _ := strconv.Atoi(r.Header.Get("Content-Length"))
 				assertEqual(t, len(body), bl)
 				w.WriteHeader(http.StatusOK)
 			}
-
 		}
 	})
 
@@ -445,7 +440,7 @@ func createFormPatchServer(t *testing.T) *httptest.Server {
 				t.Logf("LastName: %v", r.FormValue("last_name"))
 
 				targetPath := filepath.Join(getTestDataPath(), "upload")
-				_ = os.MkdirAll(targetPath, 0700)
+				_ = os.MkdirAll(targetPath, 0o700)
 
 				for _, fhdrs := range r.MultipartForm.File {
 					for _, hdr := range fhdrs {
@@ -457,7 +452,7 @@ func createFormPatchServer(t *testing.T) *httptest.Server {
 						t.Logf("Write name: %v", fname)
 
 						infile, _ := hdr.Open()
-						f, err := os.OpenFile(filepath.Join(targetPath, fname), os.O_WRONLY|os.O_CREATE, 0666)
+						f, err := os.OpenFile(filepath.Join(targetPath, fname), os.O_WRONLY|os.O_CREATE, 0o666)
 						if err != nil {
 							t.Logf("Error: %v", err)
 							return
@@ -493,13 +488,13 @@ func createFileUploadServer(t *testing.T) *httptest.Server {
 		}
 
 		targetPath := filepath.Join(getTestDataPath(), "upload-large")
-		_ = os.MkdirAll(targetPath, 0700)
+		_ = os.MkdirAll(targetPath, 0o700)
 		defer cleanupFiles(targetPath)
 
 		switch r.URL.Path {
 		case "/upload":
 			f, err := os.OpenFile(filepath.Join(targetPath, "large-file.png"),
-				os.O_WRONLY|os.O_CREATE, 0666)
+				os.O_WRONLY|os.O_CREATE, 0o666)
 			if err != nil {
 				t.Logf("Error: %v", err)
 				return

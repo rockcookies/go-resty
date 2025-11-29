@@ -34,8 +34,6 @@ import (
 type Request struct {
 	URL                        string
 	Method                     string
-	AuthToken                  string
-	AuthScheme                 string
 	QueryParams                url.Values
 	FormData                   url.Values
 	PathParams                 map[string]string
@@ -61,7 +59,6 @@ type Request struct {
 	IsDone                     bool
 	IsSaveResponse             bool
 	Timeout                    time.Duration
-	HeaderAuthorizationKey     string
 	RetryCount                 int
 	RetryWaitTime              time.Duration
 	RetryMaxWaitTime           time.Duration
@@ -76,9 +73,7 @@ type Request struct {
 	// Resty made.
 	//
 	//	first attempt + retry count = total attempts
-	Attempt int
-
-	credentials         *credentials
+	Attempt             int
 	isMultiPart         bool
 	isFormData          bool
 	setContentLength    bool
@@ -596,70 +591,6 @@ func (r *Request) SetMultipartBoundary(boundary string) *Request {
 // It overrides the value set at the client instance level.
 func (r *Request) SetContentLength(l bool) *Request {
 	r.setContentLength = l
-	return r
-}
-
-// SetBasicAuth method sets the basic authentication header in the current HTTP request.
-//
-// For Example:
-//
-//	Authorization: Basic <base64-encoded-value>
-//
-// To set the header for username "go-resty" and password "welcome"
-//
-//	client.R().SetBasicAuth("go-resty", "welcome")
-//
-// It overrides the credentials set by method [Client.SetBasicAuth].
-func (r *Request) SetBasicAuth(username, password string) *Request {
-	r.credentials = &credentials{Username: username, Password: password}
-	return r
-}
-
-// SetAuthToken method sets the auth token header(Default Scheme: Bearer) in the current HTTP request. Header example:
-//
-//	Authorization: Bearer <auth-token-value-comes-here>
-//
-// For Example: To set auth token BC594900518B4F7EAC75BD37F019E08FBC594900518B4F7EAC75BD37F019E08F
-//
-//	client.R().SetAuthToken("BC594900518B4F7EAC75BD37F019E08FBC594900518B4F7EAC75BD37F019E08F")
-//
-// It overrides the Auth token set by method [Client.SetAuthToken].
-func (r *Request) SetAuthToken(authToken string) *Request {
-	r.AuthToken = authToken
-	return r
-}
-
-// SetAuthScheme method sets the auth token scheme type in the HTTP request.
-//
-// Example Header value structure:
-//
-//	Authorization: <auth-scheme-value-set-here> <auth-token-value>
-//
-// For Example: To set the scheme to use OAuth
-//
-//	client.R().SetAuthScheme("OAuth")
-//
-//	// The outcome will be -
-//	Authorization: OAuth <auth-token-value>
-//
-// Information about Auth schemes can be found in [RFC 7235], IANA [HTTP Auth schemes]
-//
-// It overrides the `Authorization` scheme set by method [Client.SetAuthScheme].
-//
-// [RFC 7235]: https://tools.ietf.org/html/rfc7235
-// [HTTP Auth schemes]: https://www.iana.org/assignments/http-authschemes/http-authschemes.xhtml#authschemes
-func (r *Request) SetAuthScheme(scheme string) *Request {
-	r.AuthScheme = scheme
-	return r
-}
-
-// SetHeaderAuthorizationKey method sets the given HTTP header name for Authorization in the request.
-//
-// It overrides the `Authorization` header name set by method [Client.SetHeaderAuthorizationKey].
-//
-//	client.R().SetHeaderAuthorizationKey("X-Custom-Authorization")
-func (r *Request) SetHeaderAuthorizationKey(k string) *Request {
-	r.HeaderAuthorizationKey = k
 	return r
 }
 
@@ -1548,11 +1479,6 @@ func (r *Request) Clone(ctx context.Context) *Request {
 	rr.FormData = cloneURLValues(r.FormData)
 	rr.QueryParams = cloneURLValues(r.QueryParams)
 	rr.PathParams = maps.Clone(r.PathParams)
-
-	// clone basic auth
-	if r.credentials != nil {
-		rr.credentials = r.credentials.Clone()
-	}
 
 	// clone cookies
 	if l := len(r.Cookies); l > 0 {

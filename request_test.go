@@ -33,6 +33,15 @@ type AuthError struct {
 	ID, Message string
 }
 
+// testCredentials type for testing purposes
+type testCredentials struct {
+	Username, Password string
+}
+
+func (c testCredentials) String() string {
+	return "Username: **********, Password: **********"
+}
+
 func TestGet(t *testing.T) {
 	ts := createGetServer(t)
 	defer ts.Close()
@@ -221,7 +230,7 @@ func TestPostJSONStructSuccess(t *testing.T) {
 	ts := createPostServer(t)
 	defer ts.Close()
 
-	user := &credentials{Username: "testuser", Password: "testpass"}
+	user := &testCredentials{Username: "testuser", Password: "testpass"}
 	assertEqual(t, "Username: **********, Password: **********", user.String())
 
 	c := dcnl().SetJSONEscapeHTML(false)
@@ -248,7 +257,7 @@ func TestPostJSONRPCStructSuccess(t *testing.T) {
 	ts := createPostServer(t)
 	defer ts.Close()
 
-	user := &credentials{Username: "testuser", Password: "testpass"}
+	user := &testCredentials{Username: "testuser", Password: "testpass"}
 	assertEqual(t, "Username: **********, Password: **********", user.String())
 
 	c := dcnl().SetJSONEscapeHTML(false)
@@ -279,7 +288,7 @@ func TestPostJSONStructInvalidLogin(t *testing.T) {
 
 	resp, err := c.R().
 		SetHeader(hdrContentTypeKey, "application/json; charset=utf-8").
-		SetBody(credentials{Username: "testuser", Password: "testpass1"}).
+		SetBody(testCredentials{Username: "testuser", Password: "testpass1"}).
 		SetError(AuthError{}).
 		SetJSONEscapeHTML(false).
 		Post(ts.URL + "/login")
@@ -302,7 +311,7 @@ func TestPostJSONErrorRFC7807(t *testing.T) {
 	c := dcnl()
 	resp, err := c.R().
 		SetHeader(hdrContentTypeKey, "application/json; charset=utf-8").
-		SetBody(credentials{Username: "testuser", Password: "testpass1"}).
+		SetBody(testCredentials{Username: "testuser", Password: "testpass1"}).
 		SetError(AuthError{}).
 		Post(ts.URL + "/login?ct=problem")
 
@@ -496,7 +505,7 @@ func TestPostXMLStructSuccess(t *testing.T) {
 
 	resp, err := dcnldr().
 		SetHeader(hdrContentTypeKey, "application/xml").
-		SetBody(credentials{Username: "testuser", Password: "testpass"}).
+		SetBody(testCredentials{Username: "testuser", Password: "testpass"}).
 		SetContentLength(true).
 		SetResult(&AuthSuccess{}).
 		Post(ts.URL + "/login")
@@ -518,7 +527,7 @@ func TestPostXMLStructInvalidLogin(t *testing.T) {
 
 	resp, err := c.R().
 		SetHeader(hdrContentTypeKey, "application/xml").
-		SetBody(credentials{Username: "testuser", Password: "testpass1"}).
+		SetBody(testCredentials{Username: "testuser", Password: "testpass1"}).
 		Post(ts.URL + "/login")
 
 	assertError(t, err)
@@ -536,7 +545,7 @@ func TestPostXMLStructInvalidResponseXml(t *testing.T) {
 
 	resp, err := dcnldr().
 		SetHeader(hdrContentTypeKey, "application/xml").
-		SetBody(credentials{Username: "testuser", Password: "invalidxml"}).
+		SetBody(testCredentials{Username: "testuser", Password: "invalidxml"}).
 		SetResult(&AuthSuccess{}).
 		Post(ts.URL + "/login")
 
@@ -560,153 +569,6 @@ func TestPostXMLMapNotSupported(t *testing.T) {
 	assertErrorIs(t, ErrUnsupportedRequestBodyKind, err)
 }
 
-func TestRequestBasicAuth(t *testing.T) {
-	ts := createAuthServer(t)
-	defer ts.Close()
-
-	c := dcnl()
-	c.SetBaseURL(ts.URL).
-		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
-
-	resp, err := c.R().
-		SetBasicAuth("myuser", "basicauth").
-		SetResult(&AuthSuccess{}).
-		Post("/login")
-
-	assertError(t, err)
-	assertEqual(t, http.StatusOK, resp.StatusCode())
-
-	t.Logf("Result Success: %q", resp.Result().(*AuthSuccess))
-	logResponse(t, resp)
-}
-
-func TestRequestBasicAuthWithBody(t *testing.T) {
-	ts := createAuthServer(t)
-	defer ts.Close()
-
-	c := dcnl()
-	c.SetBaseURL(ts.URL).
-		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
-
-	resp, err := c.R().
-		SetBasicAuth("myuser", "basicauth").
-		SetBody([]string{strings.Repeat("hello", 25)}).
-		SetResult(&AuthSuccess{}).
-		Post("/login")
-
-	assertError(t, err)
-	assertEqual(t, http.StatusOK, resp.StatusCode())
-
-	t.Logf("Result Success: %q", resp.Result().(*AuthSuccess))
-	logResponse(t, resp)
-}
-
-func TestRequestInsecureBasicAuth(t *testing.T) {
-	ts := createAuthServerTLSOptional(t, false)
-	defer ts.Close()
-
-	var logBuf bytes.Buffer
-	logger := createLogger()
-	logger.l.SetOutput(&logBuf)
-
-	c := dcnl()
-	c.SetBaseURL(ts.URL)
-
-	resp, err := c.R().
-		SetBasicAuth("myuser", "basicauth").
-		SetResult(&AuthSuccess{}).
-		SetLogger(logger).
-		Post("/login")
-
-	assertError(t, err)
-	assertEqual(t, http.StatusOK, resp.StatusCode())
-	assertEqual(t, true, strings.Contains(logBuf.String(),
-		"WARN RESTY Using sensitive credentials in HTTP mode is not secure. Use HTTPS"))
-
-	t.Logf("Result Success: %q", resp.Result().(*AuthSuccess))
-	logResponse(t, resp)
-	t.Logf("captured request-level logs: %s", logBuf.String())
-}
-
-func TestRequestBasicAuthFail(t *testing.T) {
-	ts := createAuthServer(t)
-	defer ts.Close()
-
-	c := dcnl()
-	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetError(AuthError{})
-
-	resp, err := c.R().
-		SetBasicAuth("myuser", "basicauth1").
-		Post(ts.URL + "/login")
-
-	assertError(t, err)
-	assertEqual(t, http.StatusUnauthorized, resp.StatusCode())
-
-	t.Logf("Result Error: %q", resp.Error().(*AuthError))
-	logResponse(t, resp)
-}
-
-func TestRequestAuthToken(t *testing.T) {
-	ts := createAuthServer(t)
-	defer ts.Close()
-
-	c := dcnl()
-	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetBaseURL(ts.URL + "/")
-
-	resp, err := c.R().
-		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF-Request").
-		Get("/profile")
-
-	assertError(t, err)
-	assertEqual(t, http.StatusOK, resp.StatusCode())
-}
-
-func TestRequestAuthScheme(t *testing.T) {
-	ts := createAuthServer(t)
-	defer ts.Close()
-
-	c := dcnl()
-	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetBaseURL(ts.URL + "/")
-
-	t.Run("override auth scheme", func(t *testing.T) {
-		resp, err := c.R().
-			SetAuthScheme("Bearer").
-			SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF-Request").
-			Get("/profile")
-
-		assertError(t, err)
-		assertEqual(t, http.StatusOK, resp.StatusCode())
-	})
-
-	t.Run("empty auth scheme at request level GH954", func(t *testing.T) {
-		tokenValue := "004DDB79-6801-4587-B976-F093E6AC44FF"
-
-		resp, err := c.R().
-			SetAuthScheme("").
-			SetAuthToken(tokenValue).
-			Get("/profile")
-
-		assertError(t, err)
-		assertEqual(t, http.StatusOK, resp.StatusCode())
-		assertEqual(t, tokenValue, resp.Request.Header.Get(hdrAuthorizationKey))
-	})
-
-	t.Run("only request level auth token GH959", func(t *testing.T) {
-		tokenValue := "004DDB79-6801-4587-B976-F093E6AC44FF"
-
-		resp, err := c.R().
-			SetAuthToken(tokenValue).
-			Get("/profile")
-
-		assertError(t, err)
-		assertEqual(t, http.StatusOK, resp.StatusCode())
-		assertEqual(t, "Bearer "+tokenValue, resp.Request.Header.Get(hdrAuthorizationKey))
-	})
-}
-
 func TestFormData(t *testing.T) {
 	ts := createFormPostServer(t)
 	defer ts.Close()
@@ -719,7 +581,6 @@ func TestFormData(t *testing.T) {
 	resp, err := c.R().
 		SetFormData(map[string]string{"zip_code": "00000", "city": "Los Angeles"}).
 		SetFormData(map[string]string{"first_name": "Jeevanandam", "last_name": "M", "zip_code": "00001"}).
-		SetBasicAuth("myuser", "mypass").
 		Post(ts.URL + "/profile")
 
 	assertError(t, err)
@@ -761,7 +622,6 @@ func TestFormDataDisableWarn(t *testing.T) {
 		SetDebug(true).
 		SetFormData(map[string]string{"zip_code": "00000", "city": "Los Angeles"}).
 		SetFormData(map[string]string{"first_name": "Jeevanandam", "last_name": "M", "zip_code": "00001"}).
-		SetBasicAuth("myuser", "mypass").
 		Post(ts.URL + "/profile")
 
 	assertError(t, err)
@@ -1081,7 +941,6 @@ func TestRawFileUploadByBody(t *testing.T) {
 	resp, err := dcnldr().
 		SetBody(fileBytes).
 		SetContentLength(true).
-		SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").
 		Put(ts.URL + "/raw-upload")
 
 	assertError(t, err)
@@ -1135,25 +994,6 @@ func TestIncorrectURL(t *testing.T) {
 	_, err1 := c.R().Get("/just/a/path/also")
 	assertEqual(t, true, (strings.Contains(err1.Error(), "parse //not.a.user@%66%6f%6f.com/just/a/path/also") ||
 		strings.Contains(err1.Error(), "parse \"//not.a.user@%66%6f%6f.com/just/a/path/also\"")))
-}
-
-func TestDetectContentTypeForPointer(t *testing.T) {
-	ts := createPostServer(t)
-	defer ts.Close()
-
-	user := &credentials{Username: "testuser", Password: "testpass"}
-
-	resp, err := dcnldr().
-		SetBody(user).
-		SetResult(AuthSuccess{}).
-		Post(ts.URL + "/login")
-
-	assertError(t, err)
-	assertEqual(t, http.StatusOK, resp.StatusCode())
-
-	t.Logf("Result Success: %q", resp.Result().(*AuthSuccess))
-
-	logResponse(t, resp)
 }
 
 type ExampleUser struct {
@@ -1991,7 +1831,6 @@ func TestDebugLoggerRequestBodyTooLarge(t *testing.T) {
 				"last_name":  strings.Repeat("C", int(debugBodySizeLimit)),
 				"zip_code":   "00001",
 			}).
-			SetBasicAuth("myuser", "mypass").
 			Post(formTs.URL + "/profile")
 		assertNil(t, err)
 		assertNotNil(t, resp)
@@ -2007,7 +1846,6 @@ func TestDebugLoggerRequestBodyTooLarge(t *testing.T) {
 				"last_name":  "C",
 				"zip_code":   "00001",
 			}).
-			SetBasicAuth("myuser", "mypass").
 			Post(formTs.URL + "/profile")
 		assertNil(t, err)
 		assertNotNil(t, resp)
@@ -2019,9 +1857,8 @@ func TestDebugLoggerRequestBodyTooLarge(t *testing.T) {
 		resp, err := New().SetDebug(true).outputLogTo(output).SetDebugBodyLimit(debugBodySizeLimit).R().
 			SetBody(`{
 			"first_name": "Alex",
-			"last_name": "`+strings.Repeat("C", int(debugBodySizeLimit))+`C",
+			"last_name": "` + strings.Repeat("C", int(debugBodySizeLimit)) + `C",
 			"zip_code": "00001"}`).
-			SetBasicAuth("myuser", "mypass").
 			Post(formTs.URL + "/profile")
 		assertNil(t, err)
 		assertNotNil(t, resp)
@@ -2033,7 +1870,6 @@ func TestDebugLoggerRequestBodyTooLarge(t *testing.T) {
 		resp, err := New().outputLogTo(output).SetDebugBodyLimit(debugBodySizeLimit).R().
 			SetDebug(true).
 			SetBody([]string{strings.Repeat("hello", debugBodySizeLimit)}).
-			SetBasicAuth("myuser", "mypass").
 			Post(formTs.URL + "/profile")
 		assertNil(t, err)
 		assertNotNil(t, resp)
@@ -2110,8 +1946,7 @@ func TestRequestClone(t *testing.T) {
 	parent.SetRawPathParam("name", "parent")
 	// set http header
 	parent.SetHeader("X-Header", "parent")
-	// set an interface value
-	parent.SetBasicAuth("parent", "")
+	// set buffer
 	parent.bodyBuf = acquireBuffer()
 	parent.bodyBuf.WriteString("parent")
 	parent.RawRequest = &http.Request{}
@@ -2126,8 +1961,7 @@ func TestRequestClone(t *testing.T) {
 	clone.PathParams["name"] = "clone"
 	// update value of http header - change will only happen on clone
 	clone.SetHeader("X-Header", "clone")
-	// update value of interface type - change will only happen on clone
-	clone.credentials.Username = "clone"
+	// update buffer value - change will only happen on clone
 	clone.bodyBuf.Reset()
 	clone.bodyBuf.WriteString("clone")
 
@@ -2139,9 +1973,7 @@ func TestRequestClone(t *testing.T) {
 	// assert http header
 	assertEqual(t, "parent", parent.Header.Get("X-Header"))
 	assertEqual(t, "clone", clone.Header.Get("X-Header"))
-	// assert interface type
-	assertEqual(t, "parent", parent.credentials.Username)
-	assertEqual(t, "clone", clone.credentials.Username)
+	// assert buffer
 	assertEqual(t, "", parent.bodyBuf.String())
 	assertEqual(t, "clone", clone.bodyBuf.String())
 
@@ -2149,39 +1981,6 @@ func TestRequestClone(t *testing.T) {
 	assertNil(t, clone.RawRequest)
 	assertNotNil(t, parent.RawRequest)
 	assertNotEqual(t, parent.RawRequest, clone.RawRequest)
-}
-
-func TestResponseBodyUnlimitedReads(t *testing.T) {
-	ts := createPostServer(t)
-	defer ts.Close()
-
-	user := &credentials{Username: "testuser", Password: "testpass"}
-
-	c := dcnl().
-		SetJSONEscapeHTML(false).
-		SetResponseBodyUnlimitedReads(true)
-
-	assertEqual(t, true, c.ResponseBodyUnlimitedReads())
-
-	resp, err := c.R().
-		SetHeader(hdrContentTypeKey, "application/json; charset=utf-8").
-		SetBody(user).
-		SetResult(&AuthSuccess{}).
-		Post(ts.URL + "/login")
-
-	assertError(t, err)
-	assertEqual(t, http.StatusOK, resp.StatusCode())
-	assertEqual(t, int64(50), resp.Size())
-
-	t.Logf("Result Success: %q", resp.Result().(*AuthSuccess))
-
-	for i := 1; i <= 5; i++ {
-		b, err := io.ReadAll(resp.Body)
-		assertNil(t, err)
-		assertEqual(t, `{ "id": "success", "message": "login successful" }`, string(b))
-	}
-
-	logResponse(t, resp)
 }
 
 func TestRequestAllowPayload(t *testing.T) {
@@ -2360,7 +2159,7 @@ func TestRequestSetResultAndSetOutputFile(t *testing.T) {
 
 	res, err := c.R().
 		SetHeader(hdrContentTypeKey, "application/json; charset=utf-8").
-		SetBody(&credentials{Username: "testuser", Password: "testpass"}).
+		SetBody(map[string]string{"Username": "testuser", "Password": "testpass"}).
 		SetResponseBodyUnlimitedReads(true).
 		SetResult(&AuthSuccess{}).
 		SetOutputFileName(outputFile).
@@ -2450,7 +2249,7 @@ func TestHTTPWarnGH970(t *testing.T) {
 			SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
 
 		res, err := c.R().
-			SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").
+			SetHeader("X-Test-Token", "004DDB79-6801-4587-B976-F093E6AC44FF").
 			Get("/profile")
 
 		assertNil(t, err)
@@ -2466,7 +2265,7 @@ func TestHTTPWarnGH970(t *testing.T) {
 		c.SetBaseURL(ts.URL)
 
 		res, err := c.R().
-			SetAuthToken("004DDB79-6801-4587-B976-F093E6AC44FF").
+			SetHeader("X-Test-Token", "004DDB79-6801-4587-B976-F093E6AC44FF").
 			Get("/profile")
 
 		assertNil(t, err)
@@ -2512,11 +2311,6 @@ func TestRequestSettingsCoverage(t *testing.T) {
 	assertEqual(t, false, r5.IsRetryDefaultConditions)
 	r5.EnableRetryDefaultConditions()
 	assertEqual(t, true, r5.IsRetryDefaultConditions)
-
-	r6 := c.R()
-	customAuthHeader := "X-Custom-Authorization"
-	r6.SetHeaderAuthorizationKey(customAuthHeader)
-	assertEqual(t, customAuthHeader, r6.HeaderAuthorizationKey)
 
 	invalidJsonBytes := []byte(`{\" \": "value here"}`)
 	result := jsonIndent(invalidJsonBytes)

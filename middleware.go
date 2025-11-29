@@ -260,25 +260,7 @@ func createRawRequest(c *Client, r *Request) (err error) {
 }
 
 func addCredentials(c *Client, r *Request) error {
-	credentialsAdded := false
-	// Basic Auth
-	if r.credentials != nil {
-		credentialsAdded = true
-		r.RawRequest.SetBasicAuth(r.credentials.Username, r.credentials.Password)
-	}
-
-	// Build the token Auth header
-	if !isStringEmpty(r.AuthToken) {
-		credentialsAdded = true
-		r.RawRequest.Header.Set(r.HeaderAuthorizationKey, strings.TrimSpace(r.AuthScheme+" "+r.AuthToken))
-	}
-
-	if !c.IsDisableWarn() && credentialsAdded {
-		if r.RawRequest.URL.Scheme == "http" {
-			r.log.Warnf("Using sensitive credentials in HTTP mode is not secure. Use HTTPS")
-		}
-	}
-
+	// Auth credentials handling removed - use digest auth via UseDigestAuth() if needed
 	return nil
 }
 

@@ -57,7 +57,6 @@ type Request struct {
 	AllowMethodGetPayload      bool
 	AllowMethodDeletePayload   bool
 	IsDone                     bool
-	IsSaveResponse             bool
 	Timeout                    time.Duration
 	RetryCount                 int
 	RetryWaitTime              time.Duration
@@ -594,43 +593,6 @@ func (r *Request) SetContentLength(l bool) *Request {
 	return r
 }
 
-// SetOutputFileName method sets the output file for the current HTTP request. The current
-// HTTP response will be saved in the given file. It is similar to the `curl -o` flag.
-//
-// Absolute path or relative path can be used.
-//
-// If it is a relative path, then the output file goes under the output directory, as mentioned
-// in the [Client.SetOutputDirectory].
-//
-//	client.R().
-//		SetOutputFileName("/Users/jeeva/Downloads/ReplyWithHeader-v5.1-beta.zip").
-//		Get("http://bit.ly/1LouEKr")
-//
-// NOTE: In this scenario
-//   - [Response.BodyBytes] might be nil.
-//   - [Response].Body might have been already read.
-func (r *Request) SetOutputFileName(file string) *Request {
-	r.OutputFileName = file
-	r.SetSaveResponse(true)
-	return r
-}
-
-// SetSaveResponse method used to enable the save response option for the current requests
-//
-//	client.R().SetSaveResponse(true)
-//
-// Resty determines the save filename in the following order -
-//   - [Request.SetOutputFileName]
-//   - Content-Disposition header
-//   - Request URL using [path.Base]
-//   - Request URL hostname if path is empty or "/"
-//
-// It overrides the value set at the client instance level, see [Client.SetSaveResponse]
-func (r *Request) SetSaveResponse(save bool) *Request {
-	r.IsSaveResponse = save
-	return r
-}
-
 // SetCloseConnection method sets variable `Close` in HTTP request struct with the given
 // value. More info: https://golang.org/src/net/http/request.go
 //
@@ -660,7 +622,6 @@ func (r *Request) SetDoNotParseResponse(notParse bool) *Request {
 // in the uncompressed response is larger than the limit.
 // Body size limit will not be enforced in the following cases:
 //   - ResponseBodyLimit <= 0, which is the default behavior.
-//   - [Request.SetOutputFileName] is called to save response data to the file.
 //   - "DoNotParseResponse" is set for client or request.
 //
 // It overrides the value set at the client instance level, see [Client.SetResponseBodyLimit]

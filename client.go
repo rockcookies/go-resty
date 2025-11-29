@@ -168,7 +168,6 @@ type Client struct {
 	cookies                  []*http.Cookie
 	errorType                reflect.Type
 	debug                    bool
-	disableWarn              bool
 	timeout                  time.Duration
 	retryCount               int
 	retryWaitTime            time.Duration
@@ -186,8 +185,6 @@ type Client struct {
 	notParseResponse         bool
 	isTrace                  bool
 	debugBodyLimit           int
-	outputDirectory          string
-	isSaveResponse           bool
 	scheme                   string
 	log                      Logger
 	ctx                      context.Context
@@ -363,7 +360,6 @@ func (c *Client) R() *Request {
 		Timeout:                    c.timeout,
 		Debug:                      c.debug,
 		IsTrace:                    c.isTrace,
-		IsSaveResponse:             c.isSaveResponse,
 		RetryCount:                 c.retryCount,
 		RetryWaitTime:              c.retryWaitTime,
 		RetryMaxWaitTime:           c.retryMaxWaitTime,
@@ -785,25 +781,6 @@ func (c *Client) SetDebugLogFormatter(df DebugLogFormatterFunc) *Client {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.debugLogFormatter = df
-	return c
-}
-
-// IsDisableWarn method returns `true` if the warning message is disabled; otherwise, it is `false`.
-func (c *Client) IsDisableWarn() bool {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.disableWarn
-}
-
-// SetDisableWarn method disables the warning log message on the Resty client.
-//
-// For example, Resty warns users when BasicAuth is used in non-TLS mode.
-//
-//	client.SetDisableWarn(true)
-func (c *Client) SetDisableWarn(d bool) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.disableWarn = d
 	return c
 }
 
@@ -1359,51 +1336,6 @@ func (c *Client) handleCAs(scope string, permCerts []byte) {
 	}
 }
 
-// OutputDirectory method returns the output directory value from the client.
-func (c *Client) OutputDirectory() string {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.outputDirectory
-}
-
-// SetOutputDirectory method sets the output directory for saving HTTP responses in a file.
-// Resty creates one if the output directory does not exist. This setting is optional,
-// if you plan to use the absolute path in [Request.SetOutputFileName] and can used together.
-//
-//	client.SetOutputDirectory("/save/http/response/here")
-func (c *Client) SetOutputDirectory(dirPath string) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.outputDirectory = dirPath
-	return c
-}
-
-// IsSaveResponse method returns true if the save response is set to true; otherwise, false
-func (c *Client) IsSaveResponse() bool {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.isSaveResponse
-}
-
-// SetSaveResponse method used to enable the save response option at the client level for
-// all requests
-//
-//	client.SetSaveResponse(true)
-//
-// Resty determines the save filename in the following order -
-//   - [Request.SetOutputFileName]
-//   - Content-Disposition header
-//   - Request URL using [path.Base]
-//   - Request URL hostname if path is empty or "/"
-//
-// It can be overridden at request level, see [Request.SetSaveResponse]
-func (c *Client) SetSaveResponse(save bool) *Client {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.isSaveResponse = save
-	return c
-}
-
 // HTTPTransport method does type assertion and returns [http.Transport]
 // from the client instance, if type assertion fails it returns an error
 func (c *Client) HTTPTransport() (*http.Transport, error) {
@@ -1624,7 +1556,6 @@ func (c *Client) ResponseBodyLimit() int64 {
 // in the uncompressed response is larger than the limit.
 // Body size limit will not be enforced in the following cases:
 //   - ResponseBodyLimit <= 0, which is the default behavior.
-//   - [Request.SetOutputFileName] is called to save response data to the file.
 //   - "DoNotParseResponse" is set for client or request.
 //
 // It can be overridden at the request level; see [Request.SetResponseBodyLimit]

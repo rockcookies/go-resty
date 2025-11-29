@@ -9,13 +9,10 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
 	"net/url"
-	"path"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -490,59 +487,4 @@ func AutoParseResponseMiddleware(c *Client, res *Response) (err error) {
 	}
 
 	return
-}
-
-var hostnameReplacer = strings.NewReplacer(":", "_", ".", "_")
-
-// SaveToFileResponseMiddleware method used to write HTTP response body into
-// file. The filename is determined in the following order -
-//   - [Request.SetOutputFileName]
-//   - Content-Disposition header
-//   - Request URL using [path.Base]
-func SaveToFileResponseMiddleware(c *Client, res *Response) error {
-	if res.Err != nil || !res.Request.IsSaveResponse {
-		return nil
-	}
-
-	file := res.Request.OutputFileName
-	if isStringEmpty(file) {
-		cntDispositionValue := res.Header().Get(hdrContentDisposition)
-		if len(cntDispositionValue) > 0 {
-			if _, params, err := mime.ParseMediaType(cntDispositionValue); err == nil {
-				file = params["filename"]
-			}
-		}
-		if isStringEmpty(file) {
-			rURL, _ := url.Parse(res.Request.URL)
-			if isStringEmpty(rURL.Path) || rURL.Path == "/" {
-				file = hostnameReplacer.Replace(rURL.Host)
-			} else {
-				file = path.Base(rURL.Path)
-			}
-		}
-	}
-
-	if len(c.OutputDirectory()) > 0 && !filepath.IsAbs(file) {
-		file = filepath.Join(c.OutputDirectory(), string(filepath.Separator), file)
-	}
-
-	file = filepath.Clean(file)
-	if err := createDirectory(filepath.Dir(file)); err != nil {
-		return err
-	}
-
-	outFile, err := createFile(file)
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		closeq(outFile)
-		closeq(res.Body)
-	}()
-
-	// io.Copy reads maximum 32kb size, it is perfect for large file download too
-	res.size, err = ioCopy(outFile, res.Body)
-
-	return err
 }

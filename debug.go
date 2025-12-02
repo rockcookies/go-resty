@@ -114,7 +114,7 @@ func debugLogger(c *Client, res *Response) {
 		ReceivedAt: res.ReceivedAt(),
 		Duration:   res.Duration(),
 		Size:       res.Size(),
-		Header:     sanitizeHeaders(res.Header().Clone()),
+		Header:     res.Header().Clone(),
 		Body:       res.fmtBodyString(res.Request.DebugBodyLimit),
 	}
 
@@ -165,7 +165,7 @@ func prepareRequestDebugInfo(c *Client, r *Request) {
 		URI:    rr.URL.RequestURI(),
 		Method: r.Method,
 		Proto:  rr.Proto,
-		Header: sanitizeHeaders(rh),
+		Header: rh,
 		Body:   r.fmtBodyString(r.DebugBodyLimit),
 	}
 	if r.generateCurlCmd && r.debugLogCurlCmd {

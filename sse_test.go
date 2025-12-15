@@ -8,6 +8,7 @@ package resty
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -166,8 +167,8 @@ func TestEventSourceOverwriteFuncs(t *testing.T) {
 
 	es.SetURL(ts.URL).
 		OnMessage(messageFunc2, nil).
-		OnOpen(func(url string) {
-			t.Log("from overwrite func", url)
+		OnOpen(func(url string, respHdr http.Header) {
+			t.Log("from overwrite func", url, respHdr)
 		}).
 		OnError(func(err error) {
 			t.Log("from overwrite func", err)
@@ -264,6 +265,51 @@ func TestEventSourceRetry(t *testing.T) {
 	assertNotNil(t, err2)
 }
 
+func TestEventSourceTLSConfigerInterface(t *testing.T) {
+
+	t.Run("set and get tls config", func(t *testing.T) {
+		es := createEventSource(t, "", func(any) {}, nil)
+
+		tc, err := es.tlsConfig()
+		assertNil(t, err)
+		assertNotNil(t, tc)
+
+		tlsConfig := &tls.Config{InsecureSkipVerify: true}
+		es.SetTLSClientConfig(tlsConfig)
+		assertEqual(t, tlsConfig, es.TLSClientConfig())
+	})
+
+	t.Run("get tls config error", func(t *testing.T) {
+		es := createEventSource(t, "", func(any) {}, nil)
+
+		ct := &CustomRoundTripper1{}
+		es.httpClient.Transport = ct
+		assertNil(t, es.TLSClientConfig())
+	})
+
+	t.Run("set tls config", func(t *testing.T) {
+		es := createEventSource(t, "", func(any) {}, nil)
+
+		ct := &CustomRoundTripper2{}
+		es.httpClient.Transport = ct
+
+		tlsConfig := &tls.Config{InsecureSkipVerify: true}
+		es.SetTLSClientConfig(tlsConfig)
+		assertNotNil(t, es.TLSClientConfig())
+	})
+
+	t.Run("set tls config error", func(t *testing.T) {
+		es := createEventSource(t, "", func(any) {}, nil)
+
+		ct := &CustomRoundTripper2{returnErr: true}
+		es.httpClient.Transport = ct
+
+		tlsConfig := &tls.Config{InsecureSkipVerify: true}
+		es.SetTLSClientConfig(tlsConfig)
+		assertNil(t, es.TLSClientConfig())
+	})
+}
+
 func TestEventSourceNoRetryRequired(t *testing.T) {
 	es := createEventSource(t, "", func(any) {}, nil)
 	ts := createTestServer(func(w http.ResponseWriter, r *http.Request) {
@@ -275,6 +321,50 @@ func TestEventSourceNoRetryRequired(t *testing.T) {
 	err := es.Get()
 	fmt.Println(err)
 	assertEqual(t, true, strings.Contains(err.Error(), "400 Bad Request"))
+}
+
+func TestGH1044TrimHeader(t *testing.T) {
+	t.Run("data is nil", func(t *testing.T) {
+		result := trimHeader(0, nil)
+		assertNil(t, result)
+	})
+
+	t.Run("data has double whitespace", func(t *testing.T) {
+		data := []byte("data:  double whitespace message")
+		result := trimHeader(5, data)
+		assertEqual(t, true, result[0] == ' ')
+	})
+
+	t.Run("data has newline", func(t *testing.T) {
+		data := []byte("data: newline message\n")
+		result := trimHeader(5, data)
+		assertEqual(t, true, result[len(result)-1] != '\n')
+	})
+}
+
+func TestGH1041RequestFailureWithResponseBody(t *testing.T) {
+	es := createEventSource(t, "", func(any) {}, nil)
+	ts := createTestServer(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(hdrContentTypeKey, jsonContentType)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{ "id": "bad_request", "message": "Unable to establish connection" }`))
+	})
+	defer ts.Close()
+
+	rfFunc := func(err error, res *http.Response) {
+		defer res.Body.Close()
+		resBytes, _ := io.ReadAll(res.Body)
+
+		assertNotNil(t, err)
+		assertEqual(t, "resty:sse: 400 Bad Request", err.Error())
+		assertEqual(t, `{ "id": "bad_request", "message": "Unable to establish connection" }`, string(resBytes))
+	}
+
+	es.SetURL(ts.URL).OnRequestFailure(rfFunc)
+	es.OnRequestFailure(rfFunc)
+	err := es.Get()
+	assertNotNil(t, err)
+	assertEqual(t, "resty:sse: 400 Bad Request", err.Error())
 }
 
 func TestEventSourceHTTPError(t *testing.T) {
@@ -376,8 +466,8 @@ func createEventSource(t *testing.T, url string, fn EventMessageFunc, rt any) *E
 		SetRetryMaxWaitTime(1000 * time.Millisecond).
 		SetMaxBufSize(1 << 14). // 16kb
 		SetLogger(createLogger()).
-		OnOpen(func(url string) {
-			t.Log("I'm connected:", url)
+		OnOpen(func(url string, respHdr http.Header) {
+			t.Log("I'm connected:", url, respHdr)
 		}).
 		OnError(func(err error) {
 			t.Log("Error occurred:", err)
